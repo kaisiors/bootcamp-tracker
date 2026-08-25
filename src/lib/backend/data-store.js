@@ -869,7 +869,11 @@ function getSchema() {
 }
 
 function getDatabaseUrl() {
-  return process.env.DATABASE_URL ?? defaultDatabaseUrl;
+  return resolveDatabaseUrl();
+}
+
+export function resolveDatabaseUrl() {
+  return process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? defaultDatabaseUrl;
 }
 
 function loadLocalEnv() {
@@ -884,7 +888,7 @@ function loadLocalEnv() {
 
     if (
       match &&
-      ["DATABASE_URL", "BOOTCAMP_TRACKER_PG_SCHEMA"].includes(match[1]) &&
+      ["DATABASE_URL", "POSTGRES_URL", "BOOTCAMP_TRACKER_PG_SCHEMA"].includes(match[1]) &&
       !process.env[match[1]]
     ) {
       process.env[match[1]] = match[2].replace(/^"|"$/g, "");
