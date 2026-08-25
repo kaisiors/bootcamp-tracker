@@ -40,3 +40,15 @@ describe("empty text fields use placeholders", () => {
     }
   });
 });
+
+describe("production-safe admin password SQL", () => {
+  it("does not depend on pgcrypto helper functions", () => {
+    const backend = readFileSync("src/lib/backend/data-store.js", "utf8");
+    const readme = readFileSync("README.md", "utf8");
+
+    assert.equal(backend.includes("gen_salt("), false);
+    assert.equal(backend.includes("crypt("), false);
+    assert.equal(readme.includes("gen_salt("), false);
+    assert.equal(readme.includes("crypt("), false);
+  });
+});

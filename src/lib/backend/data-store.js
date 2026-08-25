@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -481,17 +481,16 @@ async function authenticateAdminWithClient(client, { email, password }) {
   }
 
   const result = await client.query(
-    `SELECT id, email
+    `SELECT id, email, password_hash
      FROM users
      WHERE role = 'ADMIN'
        AND lower(email) = $1
-       AND password_hash = crypt($2, password_hash)
      LIMIT 1`,
-    [normalizedEmail, rawPassword],
+    [normalizedEmail],
   );
   const admin = result.rows[0];
 
-  if (!admin) {
+  if (!admin || !verifyPassword(rawPassword, admin.password_hash)) {
     throw createHttpError(401, "Email atau password admin tidak sesuai.");
   }
 
@@ -510,7 +509,6 @@ async function prepareSchema(client) {
 }
 
 async function migrate(client) {
-  await client.query("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public");
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -593,11 +591,14 @@ async function migrate(client) {
   `);
 
   await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT");
-  await client.query(`
+  await client.query(
+    `
     UPDATE users
-    SET password_hash = crypt('password', gen_salt('bf'))
+    SET password_hash = $1
     WHERE role = 'ADMIN' AND password_hash IS NULL
-  `);
+  `,
+    [hashPassword("password")],
+  );
   await client.query(`
     DO $$
     BEGIN
@@ -639,8 +640,8 @@ async function seedInitialData(client) {
 
   await client.query(
     `INSERT INTO users (id, email, name, role, password_hash, participant_id)
-     VALUES ($1, $2, $3, 'ADMIN', crypt($4, gen_salt('bf')), NULL)`,
-    ["admin", "admin@bootcamp.test", "Admin Bootcamp", "password"],
+     VALUES ($1, $2, $3, 'ADMIN', $4, NULL)`,
+    ["admin", "admin@bootcamp.test", "Admin Bootcamp", hashPassword("password")],
   );
 
   for (const [index, bootcamp] of bootcamps.entries()) {
@@ -905,6 +906,28 @@ function createHttpError(status, message) {
 
 function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+export function hashPassword(password, salt = randomBytes(16).toString("base64url")) {
+  const key = scryptSync(String(password), salt, 64).toString("base64url");
+
+  return `scrypt$${salt}$${key}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const [, salt, key] = String(storedHash ?? "").split("$");
+
+  if (!salt || !key) {
+    return false;
+  }
+
+  const expectedKey = Buffer.from(key, "base64url");
+  const actualKey = scryptSync(String(password), salt, expectedKey.length);
+
+  return (
+    actualKey.length === expectedKey.length &&
+    timingSafeEqual(actualKey, expectedKey)
+  );
 }
 
 function parseCookie(cookieHeader) {

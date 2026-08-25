@@ -28,6 +28,7 @@ const {
   getAppState,
   getAppStateForSession,
   getSessionByToken,
+  hashPassword,
   resetAppState,
 } = await import("../src/lib/backend/data-store.js");
 
@@ -118,9 +119,9 @@ describe("backend data store", () => {
     await adminClient.query(
       `UPDATE ${testSchema}.users
        SET email = $1,
-           password_hash = crypt($2, gen_salt('bf'))
+           password_hash = $2
        WHERE id = 'admin'`,
-      ["owner@bootcamp.test", "sandi-baru"],
+      ["owner@bootcamp.test", hashPassword("sandi-baru")],
     );
 
     assert.deepEqual(
@@ -145,9 +146,9 @@ describe("backend data store", () => {
     await adminClient.query(
       `UPDATE ${testSchema}.users
        SET email = $1,
-           password_hash = crypt($2, gen_salt('bf'))
+           password_hash = $2
        WHERE id = 'admin'`,
-      ["admin@bootcamp.test", "password"],
+      ["admin@bootcamp.test", hashPassword("password")],
     );
   });
 
