@@ -100,9 +100,9 @@ export function BootcampTrackerApp() {
     bootcamp.id,
   );
   const [query, setQuery] = useState("");
-  const [amount, setAmount] = useState("100000");
-  const [title, setTitle] = useState("Kopi dan snack review project");
-  const [expenseDate, setExpenseDate] = useState("2026-08-18");
+  const [amount, setAmount] = useState("");
+  const [title, setTitle] = useState("");
+  const [expenseDate, setExpenseDate] = useState("");
   const [expenseFormMessage, setExpenseFormMessage] = useState("");
   const [checkedIds, setCheckedIds] = useState(["nala", "raka", "sari", "dewi"]);
 
@@ -727,6 +727,7 @@ function AddExpensePanel({
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setTitle(event.target.value)}
+              placeholder="Kopi dan snack review project"
               value={title}
             />
           </label>
@@ -736,6 +737,7 @@ function AddExpensePanel({
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               inputMode="numeric"
               onChange={(event) => setAmount(event.target.value)}
+              placeholder="100000"
               value={amount}
             />
           </label>
@@ -744,6 +746,7 @@ function AddExpensePanel({
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setExpenseDate(event.target.value)}
+              placeholder="2026-08-18"
               type="date"
               value={expenseDate}
             />
@@ -920,26 +923,26 @@ export function AdminWorkspace() {
   const [managedBootcamps, setManagedBootcamps] = useState(bootcamps);
   const [allParticipants, setAllParticipants] = useState(participants);
   const [allExpenses, setAllExpenses] = useState(expenses);
-  const [newBootcampName, setNewBootcampName] = useState("Data Analytics Batch 10");
-  const [newBootcampLocation, setNewBootcampLocation] = useState("Surabaya");
-  const [newBootcampStartDate, setNewBootcampStartDate] = useState("2026-10-05");
-  const [newBootcampEndDate, setNewBootcampEndDate] = useState("2026-10-11");
-  const [newBootcampDeadline, setNewBootcampDeadline] = useState("2026-10-24T23:59");
+  const [newBootcampName, setNewBootcampName] = useState("");
+  const [newBootcampLocation, setNewBootcampLocation] = useState("");
+  const [newBootcampStartDate, setNewBootcampStartDate] = useState("");
+  const [newBootcampEndDate, setNewBootcampEndDate] = useState("");
+  const [newBootcampDeadline, setNewBootcampDeadline] = useState("");
   const [newBootcampStatus, setNewBootcampStatus] = useState("active");
   const [editingBootcampId, setEditingBootcampId] = useState<string | null>(null);
-  const [newParticipantName, setNewParticipantName] = useState("Peserta Baru");
+  const [newParticipantName, setNewParticipantName] = useState("");
   const [newParticipantEmail, setNewParticipantEmail] = useState(
-    "peserta.baru@mail.test",
+    "",
   );
-  const [newParticipantPhone, setNewParticipantPhone] = useState("0812-0000-0000");
+  const [newParticipantPhone, setNewParticipantPhone] = useState("");
   const [newParticipantBootcampId, setNewParticipantBootcampId] = useState(
     bootcamps[0].id,
   );
-  const [newParticipantBankName, setNewParticipantBankName] = useState("BCA");
+  const [newParticipantBankName, setNewParticipantBankName] = useState("");
   const [newParticipantAccountNumber, setNewParticipantAccountNumber] =
-    useState("1234567890");
+    useState("");
   const [newParticipantAccountHolderName, setNewParticipantAccountHolderName] =
-    useState("Peserta Baru");
+    useState("");
   const [createdBootcampId, setCreatedBootcampId] = useState<string | null>(null);
   const [adminMessage, setAdminMessage] = useState("");
 
@@ -1032,6 +1035,7 @@ export function AdminWorkspace() {
       saveSelectedBootcampId(result.bootcamp.id);
       setCreatedBootcampId(result.bootcamp.id);
       setNewParticipantBootcampId(result.bootcamp.id);
+      resetBootcampForm();
       setAdminMessage("Bootcamp baru aktif dan muncul di pendaftaran peserta.");
     } catch (error) {
       setAdminMessage(
@@ -1054,11 +1058,11 @@ export function AdminWorkspace() {
 
   function resetBootcampForm() {
     setEditingBootcampId(null);
-    setNewBootcampName("Data Analytics Batch 10");
-    setNewBootcampLocation("Surabaya");
-    setNewBootcampStartDate("2026-10-05");
-    setNewBootcampEndDate("2026-10-11");
-    setNewBootcampDeadline("2026-10-24T23:59");
+    setNewBootcampName("");
+    setNewBootcampLocation("");
+    setNewBootcampStartDate("");
+    setNewBootcampEndDate("");
+    setNewBootcampDeadline("");
     setNewBootcampStatus("active");
   }
 
@@ -1094,6 +1098,12 @@ export function AdminWorkspace() {
       setManagedBootcamps(result.state.bootcamps);
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
+      setNewParticipantName("");
+      setNewParticipantEmail("");
+      setNewParticipantPhone("");
+      setNewParticipantBankName("");
+      setNewParticipantAccountNumber("");
+      setNewParticipantAccountHolderName("");
       setAdminMessage("Peserta baru tersimpan dan bisa login dengan emailnya.");
     } catch (error) {
       setAdminMessage(
@@ -1244,6 +1254,7 @@ export function AdminWorkspace() {
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setNewBootcampName(event.target.value)}
+              placeholder="Data Analytics Batch 10"
               required
               value={newBootcampName}
             />
@@ -1253,6 +1264,7 @@ export function AdminWorkspace() {
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setNewBootcampLocation(event.target.value)}
+              placeholder="Surabaya"
               required
               value={newBootcampLocation}
             />
@@ -1262,6 +1274,7 @@ export function AdminWorkspace() {
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setNewBootcampStartDate(event.target.value)}
+              placeholder="2026-10-05"
               required
               type="date"
               value={newBootcampStartDate}
@@ -1272,6 +1285,7 @@ export function AdminWorkspace() {
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setNewBootcampEndDate(event.target.value)}
+              placeholder="2026-10-11"
               required
               type="date"
               value={newBootcampEndDate}
@@ -1282,6 +1296,7 @@ export function AdminWorkspace() {
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setNewBootcampDeadline(event.target.value)}
+              placeholder="2026-10-24 23:59"
               required
               type="datetime-local"
               value={newBootcampDeadline}
@@ -1417,6 +1432,7 @@ export function AdminWorkspace() {
               <input
                 className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
                 onChange={(event) => setNewParticipantName(event.target.value)}
+                placeholder="Peserta Baru"
                 required
                 value={newParticipantName}
               />
@@ -1426,6 +1442,7 @@ export function AdminWorkspace() {
               <input
                 className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
                 onChange={(event) => setNewParticipantEmail(event.target.value)}
+                placeholder="peserta.baru@mail.test"
                 required
                 type="email"
                 value={newParticipantEmail}
@@ -1436,6 +1453,7 @@ export function AdminWorkspace() {
               <input
                 className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
                 onChange={(event) => setNewParticipantPhone(event.target.value)}
+                placeholder="0812-0000-0000"
                 required
                 value={newParticipantPhone}
               />
@@ -1460,6 +1478,7 @@ export function AdminWorkspace() {
               <input
                 className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
                 onChange={(event) => setNewParticipantBankName(event.target.value)}
+                placeholder="BCA"
                 required
                 value={newParticipantBankName}
               />
@@ -1472,6 +1491,7 @@ export function AdminWorkspace() {
                 onChange={(event) =>
                   setNewParticipantAccountNumber(event.target.value)
                 }
+                placeholder="1234567890"
                 required
                 value={newParticipantAccountNumber}
               />
@@ -1483,6 +1503,7 @@ export function AdminWorkspace() {
                 onChange={(event) =>
                   setNewParticipantAccountHolderName(event.target.value)
                 }
+                placeholder="Peserta Baru"
                 required
                 value={newParticipantAccountHolderName}
               />

@@ -28,7 +28,7 @@ type BootcampRecord = (typeof bootcamps)[number];
 
 export function ParticipantLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("bima.prasetya@mail.test");
+  const [email, setEmail] = useState("");
   const [availableBootcamps, setAvailableBootcamps] = useState(bootcamps);
   const [loginError, setLoginError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -126,6 +126,7 @@ export function ParticipantLoginPage() {
             <input
               className="w-full border-0 bg-transparent text-sm outline-none"
               onChange={(event) => setEmail(event.target.value)}
+              placeholder="bima.prasetya@mail.test"
               type="email"
               value={email}
             />
@@ -195,12 +196,12 @@ export function ParticipantRegistrationPage() {
   const [selectedBootcampId, setSelectedBootcampId] = useState(
     activeBootcamps[0]?.id ?? bootcamps[0].id,
   );
-  const [name, setName] = useState("Peserta Baru");
-  const [email, setEmail] = useState("peserta.baru@mail.test");
-  const [phone, setPhone] = useState("0812-0000-0000");
-  const [bankName, setBankName] = useState("BCA");
-  const [accountNumber, setAccountNumber] = useState("1234567890");
-  const [accountHolderName, setAccountHolderName] = useState("Peserta Baru");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountHolderName, setAccountHolderName] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -305,6 +306,7 @@ export function ParticipantRegistrationPage() {
             <input
               className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
               onChange={(event) => setName(event.target.value)}
+              placeholder="Peserta Baru"
               required
               value={name}
             />
@@ -314,6 +316,7 @@ export function ParticipantRegistrationPage() {
             <input
               className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
               onChange={(event) => setEmail(event.target.value)}
+              placeholder="peserta.baru@mail.test"
               required
               type="email"
               value={email}
@@ -324,6 +327,7 @@ export function ParticipantRegistrationPage() {
             <input
               className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
               onChange={(event) => setPhone(event.target.value)}
+              placeholder="0812-0000-0000"
               required
               value={phone}
             />
@@ -338,6 +342,7 @@ export function ParticipantRegistrationPage() {
               <input
                 className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
                 onChange={(event) => setBankName(event.target.value)}
+                placeholder="BCA"
                 required
                 value={bankName}
               />
@@ -348,6 +353,7 @@ export function ParticipantRegistrationPage() {
                 className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
                 inputMode="numeric"
                 onChange={(event) => setAccountNumber(event.target.value)}
+                placeholder="1234567890"
                 required
                 value={accountNumber}
               />
@@ -357,6 +363,7 @@ export function ParticipantRegistrationPage() {
               <input
                 className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
                 onChange={(event) => setAccountHolderName(event.target.value)}
+                placeholder="Peserta Baru"
                 required
                 value={accountHolderName}
               />
@@ -385,8 +392,8 @@ export function ParticipantRegistrationPage() {
 
 export function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@bootcamp.test");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -428,6 +435,7 @@ export function AdminLoginPage() {
           <input
             className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
             onChange={(event) => setEmail(event.target.value)}
+            placeholder="admin@bootcamp.test"
             type="email"
             value={email}
           />
@@ -437,6 +445,7 @@ export function AdminLoginPage() {
           <input
             className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
             onChange={(event) => setPassword(event.target.value)}
+            placeholder="Password admin"
             type="password"
             value={password}
           />
