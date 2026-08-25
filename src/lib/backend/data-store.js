@@ -452,7 +452,7 @@ export function toErrorResponse(error) {
 }
 
 async function withDatabase(callback) {
-  const client = new Client({ connectionString: getDatabaseUrl() });
+  const client = new Client(resolveDatabaseClientConfig());
 
   await client.connect();
 
@@ -868,12 +868,69 @@ function getSchema() {
   return process.env.BOOTCAMP_TRACKER_PG_SCHEMA ?? "bootcamp_tracker";
 }
 
-function getDatabaseUrl() {
-  return resolveDatabaseUrl();
-}
-
 export function resolveDatabaseUrl() {
   return process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? defaultDatabaseUrl;
+}
+
+export function resolveDatabaseClientConfig() {
+  const connectionString = resolveDatabaseUrl();
+  const ssl = resolveDatabaseSsl(connectionString);
+
+  if (!ssl) {
+    return { connectionString };
+  }
+
+  return {
+    connectionString: removeSslMode(connectionString),
+    ssl,
+  };
+}
+
+function resolveDatabaseSsl(connectionString) {
+  const url = parseDatabaseUrl(connectionString);
+
+  if (!url) {
+    return false;
+  }
+
+  const sslMode = url.searchParams.get("sslmode");
+  const ca = getSupabaseSslCa();
+
+  if (sslMode === "disable") {
+    return false;
+  }
+
+  if (ca && url.hostname.endsWith(".supabase.com")) {
+    return {
+      ca,
+      rejectUnauthorized: true,
+    };
+  }
+
+  return false;
+}
+
+function getSupabaseSslCa() {
+  return process.env.SUPABASE_SSL_CA?.replaceAll("\\n", "\n");
+}
+
+function removeSslMode(connectionString) {
+  const url = parseDatabaseUrl(connectionString);
+
+  if (!url) {
+    return connectionString;
+  }
+
+  url.searchParams.delete("sslmode");
+  return url.toString();
+}
+
+function parseDatabaseUrl(connectionString) {
+  try {
+    return new URL(connectionString);
+  } catch {
+    return null;
+  }
 }
 
 function loadLocalEnv() {
@@ -888,7 +945,12 @@ function loadLocalEnv() {
 
     if (
       match &&
-      ["DATABASE_URL", "POSTGRES_URL", "BOOTCAMP_TRACKER_PG_SCHEMA"].includes(match[1]) &&
+      [
+        "DATABASE_URL",
+        "POSTGRES_URL",
+        "SUPABASE_SSL_CA",
+        "BOOTCAMP_TRACKER_PG_SCHEMA",
+      ].includes(match[1]) &&
       !process.env[match[1]]
     ) {
       process.env[match[1]] = match[2].replace(/^"|"$/g, "");
