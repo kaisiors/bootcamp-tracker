@@ -48,6 +48,7 @@ import {
   getAppState as fetchAppState,
   logout as requestLogout,
   updateBootcamp as requestUpdateBootcamp,
+  updateExpense as requestUpdateExpense,
 } from "../lib/api-client.js";
 import {
   bootcamps,
@@ -1173,11 +1174,21 @@ export function AdminWorkspace() {
   const [newParticipantAccountHolderName, setNewParticipantAccountHolderName] =
     useState("");
   const [createdBootcampId, setCreatedBootcampId] = useState<string | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editExpenseTitle, setEditExpenseTitle] = useState("");
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [editExpenseBootcampId, setEditExpenseBootcampId] = useState("");
+  const [editExpenseDate, setEditExpenseDate] = useState("");
+  const [editExpensePayerId, setEditExpensePayerId] = useState("");
+  const [editExpenseParticipantIds, setEditExpenseParticipantIds] = useState<
+    string[]
+  >([]);
   const [adminMessage, setAdminMessage] = useState("");
   const [isSavingBootcamp, setIsSavingBootcamp] = useState(false);
   const [isCreatingParticipant, setIsCreatingParticipant] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isLoadingAdminData, setIsLoadingAdminData] = useState(true);
+  const [isSavingExpenseEdit, setIsSavingExpenseEdit] = useState(false);
   const [deletingBootcampId, setDeletingBootcampId] = useState<string | null>(
     null,
   );
@@ -1233,6 +1244,9 @@ export function AdminWorkspace() {
   const participantsById = Object.fromEntries(
     allParticipants.map((participant) => [participant.id, participant]),
   );
+  const editExpenseParticipants = allParticipants.filter((participant) =>
+    participant.bootcampIds.includes(editExpenseBootcampId),
+  );
   const totalExpenseAmount = allExpenses.reduce(
     (total, expense) => total + expense.amount,
     0,
@@ -1244,7 +1258,11 @@ export function AdminWorkspace() {
     deletingBootcampId || deletingParticipantId || deletingExpenseId,
   );
   const isAdminBlockingProcess =
-    isSavingBootcamp || isCreatingParticipant || isLoggingOut || isDeletingRecord;
+    isSavingBootcamp ||
+    isCreatingParticipant ||
+    isLoggingOut ||
+    isSavingExpenseEdit ||
+    isDeletingRecord;
   const adminBlockingMessage = isLoggingOut
     ? "Memproses logout admin..."
     : isSavingBootcamp
@@ -1253,9 +1271,11 @@ export function AdminWorkspace() {
         : "Menyimpan bootcamp baru..."
       : isCreatingParticipant
         ? "Menyimpan peserta baru..."
-        : isDeletingRecord
-          ? "Menghapus data..."
-          : "Memproses...";
+        : isSavingExpenseEdit
+          ? "Menyimpan perubahan transaksi..."
+          : isDeletingRecord
+            ? "Menghapus data..."
+            : "Memproses...";
 
   if (isLoadingAdminData) {
     return <DashboardDataShimmer label="Memuat data admin..." />;
@@ -1356,6 +1376,82 @@ export function AdminWorkspace() {
     setNewBootcampEndDate("");
     setNewBootcampDeadline("");
     setNewBootcampStatus("");
+  }
+
+  function startEditExpense(expense: ExpenseRecord) {
+    setEditingExpenseId(expense.id);
+    setEditExpenseTitle(expense.title);
+    setEditExpenseAmount(String(expense.amount));
+    setEditExpenseBootcampId(expense.bootcampId);
+    setEditExpenseDate(expense.expenseDate);
+    setEditExpensePayerId(expense.payerId);
+    setEditExpenseParticipantIds(
+      expense.participants.map((participant) => participant.userId),
+    );
+    setActiveAdminView("expenses");
+    setAdminMessage("");
+  }
+
+  function resetExpenseEditForm() {
+    setEditingExpenseId(null);
+    setEditExpenseTitle("");
+    setEditExpenseAmount("");
+    setEditExpenseBootcampId("");
+    setEditExpenseDate("");
+    setEditExpensePayerId("");
+    setEditExpenseParticipantIds([]);
+  }
+
+  function handleEditExpenseBootcampChange(bootcampId: string) {
+    setEditExpenseBootcampId(bootcampId);
+    setEditExpensePayerId("");
+    setEditExpenseParticipantIds([]);
+  }
+
+  function toggleEditExpenseParticipant(participantId: string) {
+    setEditExpenseParticipantIds((selected) =>
+      selected.includes(participantId)
+        ? selected.filter((id) => id !== participantId)
+        : [...selected, participantId],
+    );
+  }
+
+  async function handleSubmitExpenseEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingExpenseId || isSavingExpenseEdit) {
+      return;
+    }
+
+    if (editExpenseParticipantIds.length === 0) {
+      setAdminMessage("Pilih minimal satu peserta yang menanggung transaksi.");
+      return;
+    }
+
+    setIsSavingExpenseEdit(true);
+
+    try {
+      const result = await requestUpdateExpense(editingExpenseId, {
+        amount: editExpenseAmount,
+        bootcampId: editExpenseBootcampId,
+        expenseDate: editExpenseDate,
+        participantIds: editExpenseParticipantIds,
+        payerId: editExpensePayerId,
+        title: editExpenseTitle,
+      });
+
+      setManagedBootcamps(result.state.bootcamps);
+      setAllParticipants(result.state.participants);
+      setAllExpenses(result.state.expenses);
+      resetExpenseEditForm();
+      setAdminMessage("Perubahan transaksi tersimpan.");
+    } catch (error) {
+      setAdminMessage(
+        error instanceof Error ? error.message : "Transaksi gagal diperbarui.",
+      );
+    } finally {
+      setIsSavingExpenseEdit(false);
+    }
   }
 
   function openDeleteConfirmation(confirmation: DeleteConfirmation) {
@@ -2063,10 +2159,159 @@ export function AdminWorkspace() {
           <div>
             <h2 className="text-xl font-semibold">Semua transaksi</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Admin melihat pengeluaran dari semua bootcamp dan bisa menghapus
+              Admin melihat pengeluaran dari semua bootcamp dan bisa mengedit atau menghapus
               transaksi yang salah input.
             </p>
           </div>
+          {editingExpenseId ? (
+            <form
+              className="mt-5 grid gap-4 rounded-lg border border-border bg-muted p-4 md:grid-cols-2 xl:grid-cols-[1fr_0.7fr_0.9fr_0.75fr_0.9fr]"
+              onSubmit={handleSubmitExpenseEdit}
+            >
+              <div className="md:col-span-2 xl:col-span-5">
+                <h3 className="text-base font-semibold">Edit transaksi</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Ubah detail transaksi, lalu pilih ulang peserta yang menanggung.
+                </p>
+              </div>
+              <label className="grid gap-2 text-sm font-medium">
+                Judul
+                <input
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  onChange={(event) => setEditExpenseTitle(event.target.value)}
+                  placeholder="Kopi dan snack review project"
+                  required
+                  value={editExpenseTitle}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Nominal
+                <input
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  inputMode="numeric"
+                  onChange={(event) => setEditExpenseAmount(event.target.value)}
+                  placeholder="100000"
+                  required
+                  value={editExpenseAmount}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Bootcamp
+                <select
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  onChange={(event) =>
+                    handleEditExpenseBootcampChange(event.target.value)
+                  }
+                  required
+                  value={editExpenseBootcampId}
+                >
+                  <option disabled value="">
+                    Pilih bootcamp transaksi
+                  </option>
+                  {managedBootcamps.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Tanggal
+                <input
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  onChange={(event) => setEditExpenseDate(event.target.value)}
+                  required
+                  type="date"
+                  value={editExpenseDate}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Pembayar
+                <select
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  onChange={(event) => setEditExpensePayerId(event.target.value)}
+                  required
+                  value={editExpensePayerId}
+                >
+                  <option disabled value="">
+                    Pilih pembayar
+                  </option>
+                  {editExpenseParticipants.map((participant) => (
+                    <option key={participant.id} value={participant.id}>
+                      {participant.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid gap-2 md:col-span-2 xl:col-span-5">
+                <p className="text-sm font-medium">Peserta yang menanggung</p>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {editExpenseParticipants.map((participant) => {
+                    const checked = editExpenseParticipantIds.includes(participant.id);
+
+                    return (
+                      <button
+                        className={[
+                          "focus-ring flex items-center justify-between rounded-md border bg-card px-3 py-2.5 text-left text-sm transition active:translate-y-px",
+                          checked
+                            ? "border-primary bg-accent"
+                            : "border-border hover:bg-card/70",
+                        ].join(" ")}
+                        key={participant.id}
+                        onClick={() => toggleEditExpenseParticipant(participant.id)}
+                        type="button"
+                      >
+                        <span>
+                          <span className="block font-semibold">{participant.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {participant.email}
+                          </span>
+                        </span>
+                        <span
+                          className={[
+                            "grid size-5 place-items-center rounded border",
+                            checked
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-card",
+                          ].join(" ")}
+                        >
+                          {checked ? <Check size={14} strokeWidth={2.2} /> : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 md:col-span-2 md:flex-row md:justify-end xl:col-span-5">
+                <button
+                  className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-card/70 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
+                  disabled={isSavingExpenseEdit}
+                  onClick={resetExpenseEditForm}
+                  type="button"
+                >
+                  Batal edit transaksi
+                </button>
+                <button
+                  className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+                  disabled={
+                    isSavingExpenseEdit || editExpenseParticipantIds.length === 0
+                  }
+                  type="submit"
+                >
+                  {isSavingExpenseEdit ? (
+                    <LoaderCircle
+                      className="animate-spin"
+                      size={17}
+                      strokeWidth={1.8}
+                    />
+                  ) : (
+                    <Pencil size={17} strokeWidth={1.8} />
+                  )}
+                  {isSavingExpenseEdit ? "Menyimpan..." : "Simpan perubahan"}
+                </button>
+              </div>
+            </form>
+          ) : null}
           <div className="mt-5 overflow-hidden rounded-lg border border-border">
             <table className="w-full min-w-[920px] border-collapse bg-card text-sm">
               <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
@@ -2100,7 +2345,16 @@ export function AdminWorkspace() {
                       {formatRupiah(expense.amount)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-card disabled:active:translate-y-0"
+                          disabled={isSavingExpenseEdit}
+                          onClick={() => startEditExpense(expense)}
+                          title="Edit transaksi"
+                          type="button"
+                        >
+                          <Pencil size={16} strokeWidth={1.8} />
+                        </button>
                         <button
                           className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-destructive/10 disabled:active:translate-y-0"
                           disabled={Boolean(deletingExpenseId)}

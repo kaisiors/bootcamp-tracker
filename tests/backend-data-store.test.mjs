@@ -30,6 +30,7 @@ const {
   getSessionByToken,
   hashPassword,
   resetAppState,
+  updateExpense,
 } = await import("../src/lib/backend/data-store.js");
 
 describe("backend data store", () => {
@@ -261,6 +262,53 @@ describe("backend data store", () => {
           participantIds: [participantIds[0], "maya"],
         }),
       /bootcamp yang sama/,
+    );
+  });
+
+  it("updates expense details and recalculates splits", async () => {
+    const state = await getAppState();
+    const bootcampId = "bc-next-08";
+    const participantIds = state.participants
+      .filter((participant) => participant.bootcampIds.includes(bootcampId))
+      .map((participant) => participant.id)
+      .slice(0, 3);
+    const created = await createExpense({
+      title: "Backend edit awal",
+      amount: "90000",
+      bootcampId,
+      expenseDate: "2026-08-25",
+      payerId: participantIds[0],
+      participantIds: participantIds.slice(0, 2),
+    });
+    const updated = await updateExpense(created.expense.id, {
+      title: "Backend edit final",
+      amount: "150000",
+      bootcampId,
+      expenseDate: "2026-08-26",
+      payerId: participantIds[1],
+      participantIds,
+    });
+
+    assert.equal(updated.expense.id, created.expense.id);
+    assert.equal(updated.expense.title, "Backend edit final");
+    assert.equal(updated.expense.amount, 150000);
+    assert.equal(updated.expense.expenseDate, "2026-08-26");
+    assert.equal(updated.expense.payerId, participantIds[1]);
+    assert.deepEqual(
+      updated.expense.participants.map((participant) => participant.userId),
+      participantIds,
+    );
+    assert.deepEqual(
+      updated.expense.participants.map((participant) => participant.shareAmount),
+      [50000, 50000, 50000],
+    );
+    assert.ok(
+      updated.state.expenses.some(
+        (expense) =>
+          expense.id === created.expense.id &&
+          expense.title === "Backend edit final" &&
+          expense.participants.length === 3,
+      ),
     );
   });
 

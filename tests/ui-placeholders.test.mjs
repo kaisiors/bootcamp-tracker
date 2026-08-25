@@ -150,6 +150,28 @@ describe("dashboard destructive and async states", () => {
   });
 });
 
+describe("admin expense editing", () => {
+  it("shows controls for editing admin transactions", () => {
+    for (const editRequirement of [
+      "requestUpdateExpense",
+      "editingExpenseId",
+      "startEditExpense",
+      "handleSubmitExpenseEdit",
+      "resetExpenseEditForm",
+      "isSavingExpenseEdit",
+      "Menyimpan perubahan transaksi...",
+      "Edit transaksi",
+      "Batal edit transaksi",
+    ]) {
+      assert.equal(
+        trackerApp.includes(editRequirement),
+        true,
+        `${editRequirement} should be represented in the admin expense edit flow`,
+      );
+    }
+  });
+});
+
 describe("admin session controls", () => {
   it("shows an admin logout button backed by the logout API", () => {
     for (const logoutRequirement of [

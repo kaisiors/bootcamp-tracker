@@ -6,6 +6,7 @@ import pg from "pg";
 
 import { createBootcampFromDraft } from "../bootcamp-store.js";
 import { createExpenseFromDraft } from "../expense-store.js";
+import { splitExpenseEvenly } from "../finance.js";
 import { bootcamps, expenses, notifications, participants } from "../mock-data.js";
 import { createParticipantFromRegistration } from "../participant-store.js";
 
@@ -421,6 +422,97 @@ export async function createExpense(payload, options = {}) {
           await getNextSortOrder(client, "expenses"),
         ],
       );
+
+      for (const split of expense.participants) {
+        await client.query(
+          `INSERT INTO expense_splits (expense_id, participant_id, share_amount)
+           VALUES ($1, $2, $3)`,
+          [expense.id, split.userId, split.shareAmount],
+        );
+      }
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+
+    return { expense, state: await readState(client) };
+  });
+}
+
+export async function updateExpense(id, payload) {
+  return withDatabase(async (client) => {
+    const state = await readState(client);
+    const existingExpense = state.expenses.find((item) => item.id === id);
+    const bootcamp = state.bootcamps.find((item) => item.id === payload.bootcampId);
+    const payer = state.participants.find((item) => item.id === payload.payerId);
+    const participantIds = Array.isArray(payload.participantIds)
+      ? [...new Set(payload.participantIds)].filter(Boolean)
+      : [];
+    const bootcampParticipantIds = new Set(
+      state.participants
+        .filter((participant) => participant.bootcampIds.includes(payload.bootcampId))
+        .map((participant) => participant.id),
+    );
+    const amount = Number(payload.amount);
+
+    if (!existingExpense) {
+      throw createHttpError(404, "Transaksi tidak ditemukan.");
+    }
+
+    if (!bootcamp) {
+      throw createHttpError(404, "Bootcamp tidak ditemukan.");
+    }
+
+    if (!payer || !payer.bootcampIds.includes(bootcamp.id)) {
+      throw createHttpError(403, "Pembayar tidak terdaftar di bootcamp ini.");
+    }
+
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw createHttpError(422, "Nominal pengeluaran harus lebih dari 0.");
+    }
+
+    if (participantIds.length === 0) {
+      throw createHttpError(422, "Pilih minimal satu peserta.");
+    }
+
+    if (
+      participantIds.some((participantId) => !bootcampParticipantIds.has(participantId))
+    ) {
+      throw createHttpError(422, "Peserta split harus berasal dari bootcamp yang sama.");
+    }
+
+    const expense = {
+      amount,
+      bootcampId: bootcamp.id,
+      expenseDate: requireString(payload.expenseDate, "Tanggal transaksi"),
+      id,
+      participants: splitExpenseEvenly(amount, participantIds),
+      payerId: payer.id,
+      title: requireString(payload.title, "Judul pengeluaran"),
+    };
+
+    await client.query("BEGIN");
+
+    try {
+      await client.query(
+        `UPDATE expenses
+         SET title = $1, amount = $2, bootcamp_id = $3, expense_date = $4,
+             payer_id = $5
+         WHERE id = $6`,
+        [
+          expense.title,
+          expense.amount,
+          expense.bootcampId,
+          expense.expenseDate,
+          expense.payerId,
+          expense.id,
+        ],
+      );
+      await client.query("DELETE FROM expense_splits WHERE expense_id = $1", [
+        expense.id,
+      ]);
 
       for (const split of expense.participants) {
         await client.query(

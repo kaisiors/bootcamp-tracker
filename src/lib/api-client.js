@@ -62,6 +62,13 @@ export function createExpense(payload) {
   });
 }
 
+export function updateExpense(id, payload) {
+  return requestJson(`/api/expenses/${encodeURIComponent(id)}`, {
+    body: JSON.stringify(payload),
+    method: "PATCH",
+  });
+}
+
 export function deleteExpense(id) {
   return requestJson(`/api/expenses/${encodeURIComponent(id)}`, {
     method: "DELETE",
