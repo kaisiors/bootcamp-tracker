@@ -958,16 +958,14 @@ export function AdminWorkspace() {
   const [newBootcampStartDate, setNewBootcampStartDate] = useState("");
   const [newBootcampEndDate, setNewBootcampEndDate] = useState("");
   const [newBootcampDeadline, setNewBootcampDeadline] = useState("");
-  const [newBootcampStatus, setNewBootcampStatus] = useState("active");
+  const [newBootcampStatus, setNewBootcampStatus] = useState("");
   const [editingBootcampId, setEditingBootcampId] = useState<string | null>(null);
   const [newParticipantName, setNewParticipantName] = useState("");
   const [newParticipantEmail, setNewParticipantEmail] = useState(
     "",
   );
   const [newParticipantPhone, setNewParticipantPhone] = useState("");
-  const [newParticipantBootcampId, setNewParticipantBootcampId] = useState(
-    bootcamps[0].id,
-  );
+  const [newParticipantBootcampId, setNewParticipantBootcampId] = useState("");
   const [newParticipantBankName, setNewParticipantBankName] = useState("");
   const [newParticipantAccountNumber, setNewParticipantAccountNumber] =
     useState("");
@@ -1000,10 +998,10 @@ export function AdminWorkspace() {
         setManagedBootcamps(state.bootcamps);
         setAllParticipants(state.participants);
         setAllExpenses(state.expenses);
-        setNewParticipantBootcampId(
-          state.bootcamps.find((item: BootcampRecord) => item.status === "active")?.id ??
-            state.bootcamps[0]?.id ??
-            bootcamps[0].id,
+        setNewParticipantBootcampId((current) =>
+          state.bootcamps.some((item: BootcampRecord) => item.id === current)
+            ? current
+            : "",
         );
       })
       .catch((error) => {
@@ -1131,7 +1129,7 @@ export function AdminWorkspace() {
     setNewBootcampStartDate("");
     setNewBootcampEndDate("");
     setNewBootcampDeadline("");
-    setNewBootcampStatus("active");
+    setNewBootcampStatus("");
   }
 
   function openDeleteConfirmation(confirmation: DeleteConfirmation) {
@@ -1217,6 +1215,7 @@ export function AdminWorkspace() {
       setNewParticipantName("");
       setNewParticipantEmail("");
       setNewParticipantPhone("");
+      setNewParticipantBootcampId("");
       setNewParticipantBankName("");
       setNewParticipantAccountNumber("");
       setNewParticipantAccountHolderName("");
@@ -1456,8 +1455,12 @@ export function AdminWorkspace() {
             <select
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               onChange={(event) => setNewBootcampStatus(event.target.value)}
+              required
               value={newBootcampStatus}
             >
+              <option disabled value="">
+                Pilih status bootcamp
+              </option>
               <option value="active">Aktif</option>
               <option value="completed">Selesai</option>
             </select>
@@ -1641,6 +1644,9 @@ export function AdminWorkspace() {
                 required
                 value={newParticipantBootcampId}
               >
+                <option disabled value="">
+                  Pilih bootcamp peserta
+                </option>
                 {managedBootcamps.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}

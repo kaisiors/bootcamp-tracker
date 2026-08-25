@@ -41,6 +41,51 @@ describe("empty text fields use placeholders", () => {
   });
 });
 
+describe("empty dropdown fields use placeholders", () => {
+  it("does not preselect bootcamp dropdowns in auth forms", () => {
+    assert.equal(
+      authPages.includes("useState(activeBootcamps[0]?.id"),
+      false,
+      "auth bootcamp dropdowns should start empty instead of selecting the first bootcamp",
+    );
+
+    for (const placeholder of [
+      "Pilih bootcamp peserta",
+      "Pilih bootcamp yang diikuti",
+    ]) {
+      assert.equal(
+        authPages.includes(placeholder),
+        true,
+        `${placeholder} should be rendered as a disabled dropdown placeholder`,
+      );
+    }
+  });
+
+  it("does not preselect admin form dropdowns", () => {
+    for (const initialValue of [
+      'const [newBootcampStatus, setNewBootcampStatus] = useState("");',
+      'const [newParticipantBootcampId, setNewParticipantBootcampId] = useState("");',
+    ]) {
+      assert.equal(
+        trackerApp.includes(initialValue),
+        true,
+        `${initialValue} should keep admin dropdowns empty until selected`,
+      );
+    }
+
+    for (const placeholder of [
+      "Pilih status bootcamp",
+      "Pilih bootcamp peserta",
+    ]) {
+      assert.equal(
+        trackerApp.includes(placeholder),
+        true,
+        `${placeholder} should be rendered as a disabled dropdown placeholder`,
+      );
+    }
+  });
+});
+
 describe("production-safe admin password SQL", () => {
   it("does not depend on pgcrypto helper functions", () => {
     const backend = readFileSync("src/lib/backend/data-store.js", "utf8");

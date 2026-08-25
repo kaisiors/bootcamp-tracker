@@ -36,9 +36,7 @@ export function ParticipantLoginPage() {
     () => availableBootcamps.filter((bootcamp) => bootcamp.status === "active"),
     [availableBootcamps],
   );
-  const [selectedBootcampId, setSelectedBootcampId] = useState(
-    activeBootcamps[0]?.id ?? bootcamps[0].id,
-  );
+  const [selectedBootcampId, setSelectedBootcampId] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -57,9 +55,7 @@ export function ParticipantLoginPage() {
         setSelectedBootcampId((current) =>
           nextActiveBootcamps.some((bootcamp: BootcampRecord) => bootcamp.id === current)
             ? current
-            : nextActiveBootcamps[0]?.id ??
-              state.bootcamps[0]?.id ??
-              bootcamps[0].id,
+            : "",
         );
       })
       .catch((error) => {
@@ -139,8 +135,12 @@ export function ParticipantLoginPage() {
             <select
               className="w-full border-0 bg-transparent text-sm outline-none"
               onChange={(event) => setSelectedBootcampId(event.target.value)}
+              required
               value={selectedBootcampId}
             >
+              <option disabled value="">
+                Pilih bootcamp peserta
+              </option>
               {activeBootcamps.map((bootcamp) => (
                 <option key={bootcamp.id} value={bootcamp.id}>
                   {bootcamp.name}
@@ -193,9 +193,7 @@ export function ParticipantRegistrationPage() {
     () => availableBootcamps.filter((bootcamp) => bootcamp.status === "active"),
     [availableBootcamps],
   );
-  const [selectedBootcampId, setSelectedBootcampId] = useState(
-    activeBootcamps[0]?.id ?? bootcamps[0].id,
-  );
+  const [selectedBootcampId, setSelectedBootcampId] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -220,9 +218,7 @@ export function ParticipantRegistrationPage() {
         setSelectedBootcampId((current) =>
           nextActiveBootcamps.some((bootcamp: BootcampRecord) => bootcamp.id === current)
             ? current
-            : nextActiveBootcamps[0]?.id ??
-              state.bootcamps[0]?.id ??
-              bootcamps[0].id,
+            : "",
         );
       })
       .catch((error) => {
@@ -294,6 +290,9 @@ export function ParticipantRegistrationPage() {
               required
               value={selectedBootcampId}
             >
+              <option disabled value="">
+                Pilih bootcamp yang diikuti
+              </option>
               {activeBootcamps.map((bootcamp) => (
                 <option key={bootcamp.id} value={bootcamp.id}>
                   {bootcamp.name}
