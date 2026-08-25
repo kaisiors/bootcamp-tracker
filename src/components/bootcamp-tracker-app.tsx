@@ -12,6 +12,7 @@ import {
   ClipboardList,
   CreditCard,
   LayoutDashboard,
+  LoaderCircle,
   LockKeyhole,
   LogIn,
   Mail,
@@ -104,6 +105,7 @@ export function BootcampTrackerApp() {
   const [title, setTitle] = useState("");
   const [expenseDate, setExpenseDate] = useState("");
   const [expenseFormMessage, setExpenseFormMessage] = useState("");
+  const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [checkedIds, setCheckedIds] = useState(["nala", "raka", "sari", "dewi"]);
 
   const participantsById = useMemo(
@@ -284,6 +286,12 @@ export function BootcampTrackerApp() {
   }
 
   async function handleSaveExpense() {
+    if (isSavingExpense) {
+      return;
+    }
+
+    setIsSavingExpense(true);
+
     try {
       const result = await requestCreateExpense({
         title,
@@ -306,6 +314,8 @@ export function BootcampTrackerApp() {
       setExpenseFormMessage(
         error instanceof Error ? error.message : "Pengeluaran belum bisa disimpan.",
       );
+    } finally {
+      setIsSavingExpense(false);
     }
   }
 
@@ -405,6 +415,7 @@ export function BootcampTrackerApp() {
               participantsById={participantsById}
               participants={bootcampParticipants}
               expenseFormMessage={expenseFormMessage}
+              isSavingExpense={isSavingExpense}
               onSaveExpense={handleSaveExpense}
               setAmount={setAmount}
               setExpenseDate={setExpenseDate}
@@ -692,6 +703,7 @@ function AddExpensePanel({
   expenseDate,
   activeParticipant,
   expenseFormMessage,
+  isSavingExpense,
   onSaveExpense,
   participantsById,
   participants,
@@ -707,6 +719,7 @@ function AddExpensePanel({
   expenseDate: string;
   activeParticipant: ParticipantRecord;
   expenseFormMessage: string;
+  isSavingExpense: boolean;
   onSaveExpense: () => void;
   participantsById: Record<string, ParticipantRecord>;
   participants: ParticipantRecord[];
@@ -819,12 +832,17 @@ function AddExpensePanel({
           )}
         </div>
         <button
-          className="focus-ring mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px"
+          className="focus-ring mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+          disabled={isSavingExpense}
           onClick={onSaveExpense}
           type="button"
         >
-          Simpan pengeluaran
-          <ArrowRight size={17} strokeWidth={1.8} />
+          {isSavingExpense ? (
+            <LoaderCircle className="animate-spin" size={17} strokeWidth={1.8} />
+          ) : (
+            <ArrowRight size={17} strokeWidth={1.8} />
+          )}
+          {isSavingExpense ? "Menyimpan..." : "Simpan pengeluaran"}
         </button>
         {expenseFormMessage ? (
           <p className="mt-3 rounded-md border border-border bg-muted px-3 py-2 text-sm font-medium text-foreground">
@@ -945,6 +963,15 @@ export function AdminWorkspace() {
     useState("");
   const [createdBootcampId, setCreatedBootcampId] = useState<string | null>(null);
   const [adminMessage, setAdminMessage] = useState("");
+  const [isSavingBootcamp, setIsSavingBootcamp] = useState(false);
+  const [isCreatingParticipant, setIsCreatingParticipant] = useState(false);
+  const [deletingBootcampId, setDeletingBootcampId] = useState<string | null>(
+    null,
+  );
+  const [deletingParticipantId, setDeletingParticipantId] = useState<
+    string | null
+  >(null);
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -995,8 +1022,14 @@ export function AdminWorkspace() {
   async function handleSubmitBootcamp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (editingBootcampId) {
-      try {
+    if (isSavingBootcamp) {
+      return;
+    }
+
+    setIsSavingBootcamp(true);
+
+    try {
+      if (editingBootcampId) {
         const result = await requestUpdateBootcamp(editingBootcampId, {
           name: newBootcampName,
           location: newBootcampLocation,
@@ -1011,36 +1044,35 @@ export function AdminWorkspace() {
         setAllExpenses(result.state.expenses);
         setEditingBootcampId(null);
         setAdminMessage("Perubahan bootcamp tersimpan.");
-      } catch (error) {
-        setAdminMessage(
-          error instanceof Error ? error.message : "Bootcamp gagal diperbarui.",
-        );
+      } else {
+        const result = await requestCreateBootcamp({
+          name: newBootcampName,
+          location: newBootcampLocation,
+          startDate: newBootcampStartDate,
+          endDate: newBootcampEndDate,
+          paymentDeadline: newBootcampDeadline,
+          status: newBootcampStatus,
+        });
+
+        setManagedBootcamps(result.state.bootcamps);
+        setAllParticipants(result.state.participants);
+        setAllExpenses(result.state.expenses);
+        saveSelectedBootcampId(result.bootcamp.id);
+        setCreatedBootcampId(result.bootcamp.id);
+        setNewParticipantBootcampId(result.bootcamp.id);
+        resetBootcampForm();
+        setAdminMessage("Bootcamp baru aktif dan muncul di pendaftaran peserta.");
       }
-      return;
-    }
-
-    try {
-      const result = await requestCreateBootcamp({
-        name: newBootcampName,
-        location: newBootcampLocation,
-        startDate: newBootcampStartDate,
-        endDate: newBootcampEndDate,
-        paymentDeadline: newBootcampDeadline,
-        status: newBootcampStatus,
-      });
-
-      setManagedBootcamps(result.state.bootcamps);
-      setAllParticipants(result.state.participants);
-      setAllExpenses(result.state.expenses);
-      saveSelectedBootcampId(result.bootcamp.id);
-      setCreatedBootcampId(result.bootcamp.id);
-      setNewParticipantBootcampId(result.bootcamp.id);
-      resetBootcampForm();
-      setAdminMessage("Bootcamp baru aktif dan muncul di pendaftaran peserta.");
     } catch (error) {
       setAdminMessage(
-        error instanceof Error ? error.message : "Bootcamp gagal dibuat.",
+        error instanceof Error
+          ? error.message
+          : editingBootcampId
+            ? "Bootcamp gagal diperbarui."
+            : "Bootcamp gagal dibuat.",
       );
+    } finally {
+      setIsSavingBootcamp(false);
     }
   }
 
@@ -1067,6 +1099,20 @@ export function AdminWorkspace() {
   }
 
   async function deleteBootcamp(bootcampId: string) {
+    if (deletingBootcampId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Hapus bootcamp ini? Peserta dan transaksi terkait akan ikut diperbarui.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingBootcampId(bootcampId);
+
     try {
       const state = await requestDeleteBootcamp(bootcampId);
 
@@ -1078,11 +1124,19 @@ export function AdminWorkspace() {
       setAdminMessage(
         error instanceof Error ? error.message : "Bootcamp gagal dihapus.",
       );
+    } finally {
+      setDeletingBootcampId(null);
     }
   }
 
   async function handleCreateParticipant(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isCreatingParticipant) {
+      return;
+    }
+
+    setIsCreatingParticipant(true);
 
     try {
       const result = await requestCreateParticipant({
@@ -1109,10 +1163,26 @@ export function AdminWorkspace() {
       setAdminMessage(
         error instanceof Error ? error.message : "Peserta gagal dibuat.",
       );
+    } finally {
+      setIsCreatingParticipant(false);
     }
   }
 
   async function deleteParticipant(participantId: string) {
+    if (deletingParticipantId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Hapus peserta ini? Transaksi terkait akan ikut diperbarui.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingParticipantId(participantId);
+
     try {
       const state = await requestDeleteParticipant(participantId);
 
@@ -1124,10 +1194,26 @@ export function AdminWorkspace() {
       setAdminMessage(
         error instanceof Error ? error.message : "Peserta gagal dihapus.",
       );
+    } finally {
+      setDeletingParticipantId(null);
     }
   }
 
   async function deleteExpense(expenseId: string) {
+    if (deletingExpenseId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Hapus transaksi ini? Data rekap dan saldo peserta akan ikut diperbarui.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingExpenseId(expenseId);
+
     try {
       const state = await requestDeleteExpense(expenseId);
 
@@ -1139,6 +1225,8 @@ export function AdminWorkspace() {
       setAdminMessage(
         error instanceof Error ? error.message : "Transaksi gagal dihapus.",
       );
+    } finally {
+      setDeletingExpenseId(null);
     }
   }
 
@@ -1314,15 +1402,18 @@ export function AdminWorkspace() {
             </select>
           </label>
           <button
-            className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px"
+            className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+            disabled={isSavingBootcamp}
             type="submit"
           >
-            {editingBootcampId ? (
+            {isSavingBootcamp ? (
+              <LoaderCircle className="animate-spin" size={17} strokeWidth={1.8} />
+            ) : editingBootcampId ? (
               <Pencil size={17} strokeWidth={1.8} />
             ) : (
               <Plus size={17} strokeWidth={1.8} />
             )}
-            {editingBootcampId ? "Simpan" : "Buat"}
+            {isSavingBootcamp ? "Menyimpan..." : editingBootcampId ? "Simpan" : "Buat"}
           </button>
         </form>
         {editingBootcampId ? (
@@ -1396,12 +1487,25 @@ export function AdminWorkspace() {
                           <Pencil size={16} strokeWidth={1.8} />
                         </button>
                         <button
-                          className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px"
+                          className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-destructive/10 disabled:active:translate-y-0"
+                          disabled={Boolean(deletingBootcampId)}
                           onClick={() => deleteBootcamp(item.id)}
-                          title="Hapus bootcamp"
+                          title={
+                            deletingBootcampId === item.id
+                              ? "Menghapus..."
+                              : "Hapus bootcamp"
+                          }
                           type="button"
                         >
-                          <Trash2 size={16} strokeWidth={1.8} />
+                          {deletingBootcampId === item.id ? (
+                            <LoaderCircle
+                              className="animate-spin"
+                              size={16}
+                              strokeWidth={1.8}
+                            />
+                          ) : (
+                            <Trash2 size={16} strokeWidth={1.8} />
+                          )}
                         </button>
                       </div>
                     </td>
@@ -1509,11 +1613,20 @@ export function AdminWorkspace() {
               />
             </label>
             <button
-              className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px"
+              className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+              disabled={isCreatingParticipant}
               type="submit"
             >
-              <Plus size={17} strokeWidth={1.8} />
-              Tambah
+              {isCreatingParticipant ? (
+                <LoaderCircle
+                  className="animate-spin"
+                  size={17}
+                  strokeWidth={1.8}
+                />
+              ) : (
+                <Plus size={17} strokeWidth={1.8} />
+              )}
+              {isCreatingParticipant ? "Menyimpan..." : "Tambah"}
             </button>
           </form>
         </div>
@@ -1555,12 +1668,25 @@ export function AdminWorkspace() {
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">{participant.phone}</p>
                   <button
-                    className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px"
+                    className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-destructive/10 disabled:active:translate-y-0"
+                    disabled={Boolean(deletingParticipantId)}
                     onClick={() => deleteParticipant(participant.id)}
-                    title="Hapus peserta"
+                    title={
+                      deletingParticipantId === participant.id
+                        ? "Menghapus..."
+                        : "Hapus peserta"
+                    }
                     type="button"
                   >
-                    <Trash2 size={16} strokeWidth={1.8} />
+                    {deletingParticipantId === participant.id ? (
+                      <LoaderCircle
+                        className="animate-spin"
+                        size={16}
+                        strokeWidth={1.8}
+                      />
+                    ) : (
+                      <Trash2 size={16} strokeWidth={1.8} />
+                    )}
                   </button>
                 </div>
               </article>
@@ -1659,12 +1785,25 @@ export function AdminWorkspace() {
                     <td className="px-4 py-3">
                       <div className="flex justify-end">
                         <button
-                          className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px"
+                          className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-destructive/10 disabled:active:translate-y-0"
+                          disabled={Boolean(deletingExpenseId)}
                           onClick={() => deleteExpense(expense.id)}
-                          title="Hapus transaksi"
+                          title={
+                            deletingExpenseId === expense.id
+                              ? "Menghapus..."
+                              : "Hapus transaksi"
+                          }
                           type="button"
                         >
-                          <Trash2 size={16} strokeWidth={1.8} />
+                          {deletingExpenseId === expense.id ? (
+                            <LoaderCircle
+                              className="animate-spin"
+                              size={16}
+                              strokeWidth={1.8}
+                            />
+                          ) : (
+                            <Trash2 size={16} strokeWidth={1.8} />
+                          )}
                         </button>
                       </div>
                     </td>

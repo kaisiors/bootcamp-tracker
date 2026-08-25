@@ -52,3 +52,45 @@ describe("production-safe admin password SQL", () => {
     assert.equal(readme.includes("crypt("), false);
   });
 });
+
+describe("dashboard destructive and async states", () => {
+  it("asks for confirmation before deleting admin records", () => {
+    assert.equal(
+      trackerApp.includes("window.confirm"),
+      true,
+      "delete actions should use a browser confirmation",
+    );
+
+    for (const confirmationText of [
+      "Hapus bootcamp ini?",
+      "Hapus peserta ini?",
+      "Hapus transaksi ini?",
+    ]) {
+      assert.equal(
+        trackerApp.includes(confirmationText),
+        true,
+        `${confirmationText} should be confirmed before the API delete request`,
+      );
+    }
+  });
+
+  it("has visible loading state for async dashboard processes", () => {
+    for (const loadingState of [
+      "isSavingExpense",
+      "isSavingBootcamp",
+      "isCreatingParticipant",
+      "deletingBootcampId",
+      "deletingParticipantId",
+      "deletingExpenseId",
+      "LoaderCircle",
+      "Menyimpan...",
+      "Menghapus...",
+    ]) {
+      assert.equal(
+        trackerApp.includes(loadingState),
+        true,
+        `${loadingState} should be represented in the dashboard UI`,
+      );
+    }
+  });
+});
