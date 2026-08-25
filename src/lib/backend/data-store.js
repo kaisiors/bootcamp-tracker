@@ -93,11 +93,14 @@ export async function authenticateParticipant({ email, bootcampId }) {
 }
 
 export async function authenticateAdmin({ email, password }) {
-  if (email !== "admin@bootcamp.test" || password !== "password") {
-    throw createHttpError(401, "Email atau password admin tidak sesuai.");
-  }
+  return withDatabase(async (client) => {
+    const admin = await authenticateAdminWithClient(client, { email, password });
 
-  return { email, role: "admin" };
+    return {
+      email: admin.email,
+      role: admin.role,
+    };
+  });
 }
 
 export async function createParticipantSession(payload) {
@@ -122,15 +125,17 @@ export async function createParticipantSession(payload) {
 
 export async function createAdminSession(payload) {
   return withDatabase(async (client) => {
-    const admin = await authenticateAdmin(payload);
-    const user = await client.query("SELECT id FROM users WHERE role = 'ADMIN' LIMIT 1");
+    const admin = await authenticateAdminWithClient(client, payload);
 
     return {
-      admin,
+      admin: {
+        email: admin.email,
+        role: admin.role,
+      },
       session: await createSession(client, {
         participantId: null,
         role: "ADMIN",
-        userId: user.rows[0].id,
+        userId: admin.id,
       }),
     };
   });
@@ -467,20 +472,52 @@ async function withDatabase(callback) {
   }
 }
 
+async function authenticateAdminWithClient(client, { email, password }) {
+  const normalizedEmail = String(email ?? "").trim().toLowerCase();
+  const rawPassword = String(password ?? "");
+
+  if (!normalizedEmail || !rawPassword) {
+    throw createHttpError(401, "Email atau password admin tidak sesuai.");
+  }
+
+  const result = await client.query(
+    `SELECT id, email
+     FROM users
+     WHERE role = 'ADMIN'
+       AND lower(email) = $1
+       AND password_hash = crypt($2, password_hash)
+     LIMIT 1`,
+    [normalizedEmail, rawPassword],
+  );
+  const admin = result.rows[0];
+
+  if (!admin) {
+    throw createHttpError(401, "Email atau password admin tidak sesuai.");
+  }
+
+  return {
+    email: admin.email,
+    id: admin.id,
+    role: "admin",
+  };
+}
+
 async function prepareSchema(client) {
   const schema = getSchema();
 
   await client.query(`CREATE SCHEMA IF NOT EXISTS ${quoteIdentifier(schema)}`);
-  await client.query(`SET search_path TO ${quoteIdentifier(schema)}`);
+  await client.query(`SET search_path TO ${quoteIdentifier(schema)}, public`);
 }
 
 async function migrate(client) {
+  await client.query("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public");
   await client.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('ADMIN', 'PARTICIPANT')),
+      password_hash TEXT,
       participant_id TEXT UNIQUE
     );
 
@@ -554,6 +591,29 @@ async function migrate(client) {
       created_at TEXT NOT NULL
     );
   `);
+
+  await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT");
+  await client.query(`
+    UPDATE users
+    SET password_hash = crypt('password', gen_salt('bf'))
+    WHERE role = 'ADMIN' AND password_hash IS NULL
+  `);
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'users_admin_password_hash_required'
+          AND connamespace = current_schema()::regnamespace
+      ) THEN
+        ALTER TABLE users
+        ADD CONSTRAINT users_admin_password_hash_required
+        CHECK (role <> 'ADMIN' OR password_hash IS NOT NULL);
+      END IF;
+    END
+    $$;
+  `);
 }
 
 async function dropTables(client) {
@@ -578,8 +638,9 @@ async function seedInitialData(client) {
   }
 
   await client.query(
-    "INSERT INTO users (id, email, name, role, participant_id) VALUES ($1, $2, $3, 'ADMIN', NULL)",
-    ["admin", "admin@bootcamp.test", "Admin Bootcamp"],
+    `INSERT INTO users (id, email, name, role, password_hash, participant_id)
+     VALUES ($1, $2, $3, 'ADMIN', crypt($4, gen_salt('bf')), NULL)`,
+    ["admin", "admin@bootcamp.test", "Admin Bootcamp", "password"],
   );
 
   for (const [index, bootcamp] of bootcamps.entries()) {

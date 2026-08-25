@@ -49,6 +49,20 @@ Admin:
 - Email: `admin@bootcamp.test`
 - Password: `password`
 
+## Mengubah Admin
+
+Data admin disimpan di tabel `bootcamp_tracker.users`. Untuk mengganti email
+dan password admin, jalankan SQL ini dari PostgreSQL atau Supabase SQL Editor:
+
+```sql
+update bootcamp_tracker.users
+set email = 'admin-baru@example.com',
+    password_hash = crypt('password-baru', gen_salt('bf'))
+where id = 'admin';
+```
+
+Password disimpan sebagai hash bcrypt dari `pgcrypto`, bukan plaintext.
+
 ## Verifikasi
 
 ```bash

@@ -95,7 +95,7 @@ describe("backend data store", () => {
     );
   });
 
-  it("validates static admin credentials", async () => {
+  it("validates database-backed admin credentials", async () => {
     assert.deepEqual(
       await authenticateAdmin({
         email: "admin@bootcamp.test",
@@ -113,6 +113,41 @@ describe("backend data store", () => {
           password: "salah",
         }),
       /tidak sesuai/,
+    );
+
+    await adminClient.query(
+      `UPDATE ${testSchema}.users
+       SET email = $1,
+           password_hash = crypt($2, gen_salt('bf'))
+       WHERE id = 'admin'`,
+      ["owner@bootcamp.test", "sandi-baru"],
+    );
+
+    assert.deepEqual(
+      await authenticateAdmin({
+        email: "owner@bootcamp.test",
+        password: "sandi-baru",
+      }),
+      {
+        email: "owner@bootcamp.test",
+        role: "admin",
+      },
+    );
+    await assert.rejects(
+      () =>
+        authenticateAdmin({
+          email: "admin@bootcamp.test",
+          password: "password",
+        }),
+      /tidak sesuai/,
+    );
+
+    await adminClient.query(
+      `UPDATE ${testSchema}.users
+       SET email = $1,
+           password_hash = crypt($2, gen_salt('bf'))
+       WHERE id = 'admin'`,
+      ["admin@bootcamp.test", "password"],
     );
   });
 
