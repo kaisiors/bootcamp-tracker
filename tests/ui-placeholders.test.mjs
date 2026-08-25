@@ -54,22 +54,28 @@ describe("production-safe admin password SQL", () => {
 });
 
 describe("dashboard destructive and async states", () => {
-  it("asks for confirmation before deleting admin records", () => {
+  it("uses an in-app confirmation dialog before deleting admin records", () => {
     assert.equal(
       trackerApp.includes("window.confirm"),
-      true,
-      "delete actions should use a browser confirmation",
+      false,
+      "delete actions should not use the browser confirmation dialog",
     );
 
-    for (const confirmationText of [
+    for (const dialogRequirement of [
+      "DeleteConfirmationDialog",
+      "deleteConfirmation",
+      "confirmDeleteAction",
+      'role="dialog"',
+      'aria-modal="true"',
       "Hapus bootcamp ini?",
       "Hapus peserta ini?",
       "Hapus transaksi ini?",
+      "Batal",
     ]) {
       assert.equal(
-        trackerApp.includes(confirmationText),
+        trackerApp.includes(dialogRequirement),
         true,
-        `${confirmationText} should be confirmed before the API delete request`,
+        `${dialogRequirement} should be represented in the custom delete confirmation UI`,
       );
     }
   });

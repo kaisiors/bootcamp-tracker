@@ -73,6 +73,14 @@ type AdminView =
   | "participants"
   | "bankAccounts"
   | "expenses";
+type DeleteConfirmation = {
+  kind: "bootcamp" | "participant" | "expense";
+  id: string;
+  title: string;
+  description: string;
+  itemName: string;
+  confirmLabel: string;
+};
 
 const navItems = [
   { id: "overview", label: "Dashboard", icon: LayoutDashboard },
@@ -972,6 +980,8 @@ export function AdminWorkspace() {
     string | null
   >(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] =
+    useState<DeleteConfirmation | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -1018,6 +1028,9 @@ export function AdminWorkspace() {
   const createdBootcamp = createdBootcampId
     ? managedBootcamps.find((item) => item.id === createdBootcampId)
     : null;
+  const isDeletingRecord = Boolean(
+    deletingBootcampId || deletingParticipantId || deletingExpenseId,
+  );
 
   async function handleSubmitBootcamp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1098,16 +1111,42 @@ export function AdminWorkspace() {
     setNewBootcampStatus("active");
   }
 
-  async function deleteBootcamp(bootcampId: string) {
-    if (deletingBootcampId) {
+  function openDeleteConfirmation(confirmation: DeleteConfirmation) {
+    if (isDeletingRecord) {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Hapus bootcamp ini? Peserta dan transaksi terkait akan ikut diperbarui.",
-    );
+    setDeleteConfirmation(confirmation);
+  }
 
-    if (!confirmed) {
+  function closeDeleteConfirmation() {
+    if (isDeletingRecord) {
+      return;
+    }
+
+    setDeleteConfirmation(null);
+  }
+
+  async function confirmDeleteAction() {
+    if (!deleteConfirmation || isDeletingRecord) {
+      return;
+    }
+
+    const currentConfirmation = deleteConfirmation;
+
+    if (currentConfirmation.kind === "bootcamp") {
+      await deleteBootcamp(currentConfirmation.id);
+    } else if (currentConfirmation.kind === "participant") {
+      await deleteParticipant(currentConfirmation.id);
+    } else {
+      await deleteExpense(currentConfirmation.id);
+    }
+
+    setDeleteConfirmation(null);
+  }
+
+  async function deleteBootcamp(bootcampId: string) {
+    if (deletingBootcampId) {
       return;
     }
 
@@ -1173,14 +1212,6 @@ export function AdminWorkspace() {
       return;
     }
 
-    const confirmed = window.confirm(
-      "Hapus peserta ini? Transaksi terkait akan ikut diperbarui.",
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setDeletingParticipantId(participantId);
 
     try {
@@ -1201,14 +1232,6 @@ export function AdminWorkspace() {
 
   async function deleteExpense(expenseId: string) {
     if (deletingExpenseId) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      "Hapus transaksi ini? Data rekap dan saldo peserta akan ikut diperbarui.",
-    );
-
-    if (!confirmed) {
       return;
     }
 
@@ -1489,7 +1512,17 @@ export function AdminWorkspace() {
                         <button
                           className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-destructive/10 disabled:active:translate-y-0"
                           disabled={Boolean(deletingBootcampId)}
-                          onClick={() => deleteBootcamp(item.id)}
+                          onClick={() =>
+                            openDeleteConfirmation({
+                              kind: "bootcamp",
+                              id: item.id,
+                              title: "Hapus bootcamp ini?",
+                              description:
+                                "Peserta dan transaksi terkait akan ikut diperbarui.",
+                              itemName: item.name,
+                              confirmLabel: "Hapus bootcamp",
+                            })
+                          }
                           title={
                             deletingBootcampId === item.id
                               ? "Menghapus..."
@@ -1670,7 +1703,17 @@ export function AdminWorkspace() {
                   <button
                     className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-destructive/10 disabled:active:translate-y-0"
                     disabled={Boolean(deletingParticipantId)}
-                    onClick={() => deleteParticipant(participant.id)}
+                    onClick={() =>
+                      openDeleteConfirmation({
+                        kind: "participant",
+                        id: participant.id,
+                        title: "Hapus peserta ini?",
+                        description:
+                          "Transaksi terkait akan ikut diperbarui.",
+                        itemName: participant.name,
+                        confirmLabel: "Hapus peserta",
+                      })
+                    }
                     title={
                       deletingParticipantId === participant.id
                         ? "Menghapus..."
@@ -1787,7 +1830,17 @@ export function AdminWorkspace() {
                         <button
                           className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-destructive/30 bg-destructive/10 text-destructive transition hover:bg-destructive/15 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-destructive/10 disabled:active:translate-y-0"
                           disabled={Boolean(deletingExpenseId)}
-                          onClick={() => deleteExpense(expense.id)}
+                          onClick={() =>
+                            openDeleteConfirmation({
+                              kind: "expense",
+                              id: expense.id,
+                              title: "Hapus transaksi ini?",
+                              description:
+                                "Data rekap dan saldo peserta akan ikut diperbarui.",
+                              itemName: expense.title,
+                              confirmLabel: "Hapus transaksi",
+                            })
+                          }
                           title={
                             deletingExpenseId === expense.id
                               ? "Menghapus..."
@@ -1814,7 +1867,86 @@ export function AdminWorkspace() {
           </div>
         </section>
       ) : null}
+
+      <DeleteConfirmationDialog
+        confirmation={deleteConfirmation}
+        isDeleting={isDeletingRecord}
+        onCancel={closeDeleteConfirmation}
+        onConfirm={confirmDeleteAction}
+      />
     </section>
+  );
+}
+
+function DeleteConfirmationDialog({
+  confirmation,
+  isDeleting,
+  onCancel,
+  onConfirm,
+}: {
+  confirmation: DeleteConfirmation | null;
+  isDeleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!confirmation) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/30 p-4 backdrop-blur-sm">
+      <div
+        aria-labelledby="delete-confirmation-title"
+        aria-modal="true"
+        className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-foreground shadow-[0_24px_90px_rgba(23,32,26,0.22)]"
+        role="dialog"
+      >
+        <div className="flex items-start gap-3">
+          <div className="grid size-10 shrink-0 place-items-center rounded-md bg-destructive/10 text-destructive">
+            <AlertTriangle size={20} strokeWidth={1.9} />
+          </div>
+          <div>
+            <h2
+              className="text-lg font-semibold tracking-[0]"
+              id="delete-confirmation-title"
+            >
+              {confirmation.title}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {confirmation.description}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-sm font-semibold">
+          {confirmation.itemName}
+        </div>
+
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
+            disabled={isDeleting}
+            onClick={onCancel}
+            type="button"
+          >
+            Batal
+          </button>
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-destructive px-4 text-sm font-semibold text-destructive-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+            disabled={isDeleting}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isDeleting ? (
+              <LoaderCircle className="animate-spin" size={16} strokeWidth={1.8} />
+            ) : (
+              <Trash2 size={16} strokeWidth={1.8} />
+            )}
+            {isDeleting ? "Menghapus..." : confirmation.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
