@@ -220,3 +220,71 @@ describe("blocking process loading overlays", () => {
     }
   });
 });
+
+describe("initial data loading states", () => {
+  it("does not show dummy dashboard data while the API state is loading", () => {
+    for (const emptyState of [
+      "useState<BootcampRecord[]>([])",
+      "useState<ParticipantRecord[]>([])",
+      "useState<ExpenseRecord[]>([])",
+      "useState<NotificationRecord[]>([])",
+      "DashboardDataShimmer",
+      "isLoadingDashboardData",
+      "isLoadingAdminData",
+    ]) {
+      assert.equal(
+        trackerApp.includes(emptyState),
+        true,
+        `${emptyState} should be represented so dashboard data loads through shimmer instead of mock rows`,
+      );
+    }
+
+    for (const dummyInitialState of [
+      "useState(bootcamps)",
+      "useState(participants)",
+      "useState(expenses)",
+      "useState(notifications)",
+    ]) {
+      assert.equal(
+        trackerApp.includes(dummyInitialState),
+        false,
+        `${dummyInitialState} should not seed visible dashboard data before API loading finishes`,
+      );
+    }
+  });
+
+  it("does not show dummy bootcamp dropdown data while auth data is loading", () => {
+    for (const authLoadingRequirement of [
+      "useState<BootcampRecord[]>([])",
+      "BootcampSelectShimmer",
+      "isLoadingBootcamps",
+    ]) {
+      assert.equal(
+        authPages.includes(authLoadingRequirement),
+        true,
+        `${authLoadingRequirement} should keep auth bootcamp data in shimmer state until fetched`,
+      );
+    }
+
+    assert.equal(
+      authPages.includes("useState(bootcamps)"),
+      false,
+      "auth pages should not seed bootcamp dropdowns with mock data before API loading finishes",
+    );
+  });
+});
+
+describe("expense participant selection", () => {
+  it("does not preselect expense participants or fall back to all visible participants", () => {
+    assert.equal(
+      trackerApp.includes('useState(["nala", "raka", "sari", "dewi"])'),
+      false,
+      "expense participant checkboxes should start empty",
+    );
+    assert.equal(
+      trackerApp.includes(": bootcampParticipants.map((participant) => participant.id)"),
+      false,
+      "an empty expense participant selection should stay empty instead of selecting every participant",
+    );
+  });
+});

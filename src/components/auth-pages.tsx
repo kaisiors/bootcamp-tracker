@@ -30,9 +30,10 @@ type BootcampRecord = (typeof bootcamps)[number];
 export function ParticipantLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [availableBootcamps, setAvailableBootcamps] = useState(bootcamps);
+  const [availableBootcamps, setAvailableBootcamps] = useState<BootcampRecord[]>([]);
   const [loginError, setLoginError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingBootcamps, setIsLoadingBootcamps] = useState(true);
   const activeBootcamps = useMemo(
     () => availableBootcamps.filter((bootcamp) => bootcamp.status === "active"),
     [availableBootcamps],
@@ -64,6 +65,11 @@ export function ParticipantLoginPage() {
           setLoginError(
             error instanceof Error ? error.message : "Data bootcamp gagal dimuat.",
           );
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingBootcamps(false);
         }
       });
 
@@ -135,24 +141,28 @@ export function ParticipantLoginPage() {
         </label>
         <label className="grid gap-2 text-sm font-medium">
           Bootcamp
-          <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2.5 focus-within:ring-2 focus-within:ring-ring">
-            <CalendarClock size={18} strokeWidth={1.8} />
-            <select
-              className="w-full border-0 bg-transparent text-sm outline-none"
-              onChange={(event) => setSelectedBootcampId(event.target.value)}
-              required
-              value={selectedBootcampId}
-            >
-              <option disabled value="">
-                Pilih bootcamp peserta
-              </option>
-              {activeBootcamps.map((bootcamp) => (
-                <option key={bootcamp.id} value={bootcamp.id}>
-                  {bootcamp.name}
+          {isLoadingBootcamps ? (
+            <BootcampSelectShimmer />
+          ) : (
+            <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2.5 focus-within:ring-2 focus-within:ring-ring">
+              <CalendarClock size={18} strokeWidth={1.8} />
+              <select
+                className="w-full border-0 bg-transparent text-sm outline-none"
+                onChange={(event) => setSelectedBootcampId(event.target.value)}
+                required
+                value={selectedBootcampId}
+              >
+                <option disabled value="">
+                  Pilih bootcamp peserta
                 </option>
-              ))}
-            </select>
-          </div>
+                {activeBootcamps.map((bootcamp) => (
+                  <option key={bootcamp.id} value={bootcamp.id}>
+                    {bootcamp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </label>
         {loginError ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
@@ -191,9 +201,10 @@ export function ParticipantLoginPage() {
 
 export function ParticipantRegistrationPage() {
   const router = useRouter();
-  const [availableBootcamps, setAvailableBootcamps] = useState(bootcamps);
+  const [availableBootcamps, setAvailableBootcamps] = useState<BootcampRecord[]>([]);
   const [formMessage, setFormMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingBootcamps, setIsLoadingBootcamps] = useState(true);
   const activeBootcamps = useMemo(
     () => availableBootcamps.filter((bootcamp) => bootcamp.status === "active"),
     [availableBootcamps],
@@ -231,6 +242,11 @@ export function ParticipantRegistrationPage() {
           setFormMessage(
             error instanceof Error ? error.message : "Data bootcamp gagal dimuat.",
           );
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingBootcamps(false);
         }
       });
 
@@ -293,21 +309,25 @@ export function ParticipantRegistrationPage() {
         <section className="grid gap-4">
           <label className="grid gap-2 text-sm font-medium">
             Bootcamp
-            <select
-              className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
-              onChange={(event) => setSelectedBootcampId(event.target.value)}
-              required
-              value={selectedBootcampId}
-            >
-              <option disabled value="">
-                Pilih bootcamp yang diikuti
-              </option>
-              {activeBootcamps.map((bootcamp) => (
-                <option key={bootcamp.id} value={bootcamp.id}>
-                  {bootcamp.name}
+            {isLoadingBootcamps ? (
+              <BootcampSelectShimmer />
+            ) : (
+              <select
+                className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
+                onChange={(event) => setSelectedBootcampId(event.target.value)}
+                required
+                value={selectedBootcampId}
+              >
+                <option disabled value="">
+                  Pilih bootcamp yang diikuti
                 </option>
-              ))}
-            </select>
+                {activeBootcamps.map((bootcamp) => (
+                  <option key={bootcamp.id} value={bootcamp.id}>
+                    {bootcamp.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
           <label className="grid gap-2 text-sm font-medium">
             Nama peserta
@@ -477,6 +497,20 @@ export function AdminLoginPage() {
         </button>
       </form>
     </AuthShell>
+  );
+}
+
+function BootcampSelectShimmer() {
+  return (
+    <div
+      aria-busy="true"
+      className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2.5"
+      role="status"
+    >
+      <CalendarClock className="text-muted-foreground" size={18} strokeWidth={1.8} />
+      <span className="h-4 w-full animate-pulse rounded-md bg-muted" />
+      <span className="sr-only">Memuat pilihan bootcamp...</span>
+    </div>
   );
 }
 

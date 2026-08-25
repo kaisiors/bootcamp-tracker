@@ -50,7 +50,6 @@ import {
   updateBootcamp as requestUpdateBootcamp,
 } from "../lib/api-client.js";
 import {
-  bootcamp,
   bootcamps,
   expenses,
   notifications,
@@ -104,21 +103,20 @@ const adminNavItems = [
 
 export function BootcampTrackerApp() {
   const [activeView, setActiveView] = useState<View>("overview");
-  const [managedBootcamps, setManagedBootcamps] = useState(bootcamps);
-  const [allParticipants, setAllParticipants] = useState(participants);
-  const [allExpenses, setAllExpenses] = useState(expenses);
-  const [allNotifications, setAllNotifications] = useState(notifications);
-  const [selectedParticipantId, setSelectedParticipantId] = useState(currentUserId);
-  const [selectedBootcampId, setSelectedBootcampId] = useState(
-    bootcamp.id,
-  );
+  const [managedBootcamps, setManagedBootcamps] = useState<BootcampRecord[]>([]);
+  const [allParticipants, setAllParticipants] = useState<ParticipantRecord[]>([]);
+  const [allExpenses, setAllExpenses] = useState<ExpenseRecord[]>([]);
+  const [allNotifications, setAllNotifications] = useState<NotificationRecord[]>([]);
+  const [selectedParticipantId, setSelectedParticipantId] = useState("");
+  const [selectedBootcampId, setSelectedBootcampId] = useState("");
   const [query, setQuery] = useState("");
   const [amount, setAmount] = useState("");
   const [title, setTitle] = useState("");
   const [expenseDate, setExpenseDate] = useState("");
   const [expenseFormMessage, setExpenseFormMessage] = useState("");
   const [isSavingExpense, setIsSavingExpense] = useState(false);
-  const [checkedIds, setCheckedIds] = useState(["nala", "raka", "sari", "dewi"]);
+  const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
 
   const participantsById = useMemo(
     () =>
@@ -130,7 +128,8 @@ export function BootcampTrackerApp() {
   const currentParticipant =
     participantsById[selectedParticipantId] ??
     participantsById[currentUserId] ??
-    allParticipants[0];
+    allParticipants[0] ??
+    null;
 
   useEffect(() => {
     let isMounted = true;
@@ -141,52 +140,59 @@ export function BootcampTrackerApp() {
           return;
         }
 
-      const storedParticipantId = loadSelectedParticipantId();
-      const nextParticipant =
-        state.participants.find(
-          (participant: ParticipantRecord) => participant.id === storedParticipantId,
-        ) ??
-        state.participants.find(
-          (participant: ParticipantRecord) => participant.id === currentUserId,
-        ) ??
-        state.participants[0];
-      const params = new URLSearchParams(window.location.search);
-      const requestedBootcampId = params.get("bootcampId");
-      const storedBootcampId = loadSelectedBootcampId();
-      const nextBootcampId =
-        requestedBootcampId ??
-        storedBootcampId ??
-        nextParticipant?.bootcampIds[0] ??
-        bootcamp.id;
-      const participantBootcampIds = new Set(nextParticipant?.bootcampIds ?? []);
+        const storedParticipantId = loadSelectedParticipantId();
+        const nextParticipant =
+          state.participants.find(
+            (participant: ParticipantRecord) => participant.id === storedParticipantId,
+          ) ??
+          state.participants.find(
+            (participant: ParticipantRecord) => participant.id === currentUserId,
+          ) ??
+          state.participants[0];
+        const params = new URLSearchParams(window.location.search);
+        const requestedBootcampId = params.get("bootcampId");
+        const storedBootcampId = loadSelectedBootcampId();
+        const nextBootcampId =
+          requestedBootcampId ??
+          storedBootcampId ??
+          nextParticipant?.bootcampIds[0] ??
+          "";
+        const participantBootcampIds = new Set(nextParticipant?.bootcampIds ?? []);
 
-      setManagedBootcamps(state.bootcamps);
-      setAllParticipants(state.participants);
-      setAllExpenses(state.expenses);
-      setAllNotifications(state.notifications);
+        setManagedBootcamps(state.bootcamps);
+        setAllParticipants(state.participants);
+        setAllExpenses(state.expenses);
+        setAllNotifications(state.notifications);
 
-      if (nextParticipant) {
-        setSelectedParticipantId(nextParticipant.id);
-        saveSelectedParticipantId(nextParticipant.id);
-      }
+        if (nextParticipant) {
+          setSelectedParticipantId(nextParticipant.id);
+          saveSelectedParticipantId(nextParticipant.id);
+        }
 
-      if (
-        state.bootcamps.some(
-          (item: BootcampRecord) =>
-            item.id === nextBootcampId && participantBootcampIds.has(item.id),
-        )
-      ) {
-        setSelectedBootcampId(nextBootcampId);
-        saveSelectedBootcampId(nextBootcampId);
-      } else if (nextParticipant?.bootcampIds[0]) {
-        setSelectedBootcampId(nextParticipant.bootcampIds[0]);
-        saveSelectedBootcampId(nextParticipant.bootcampIds[0]);
-      }
+        if (
+          state.bootcamps.some(
+            (item: BootcampRecord) =>
+              item.id === nextBootcampId && participantBootcampIds.has(item.id),
+          )
+        ) {
+          setSelectedBootcampId(nextBootcampId);
+          saveSelectedBootcampId(nextBootcampId);
+        } else if (nextParticipant?.bootcampIds[0]) {
+          setSelectedBootcampId(nextParticipant.bootcampIds[0]);
+          saveSelectedBootcampId(nextParticipant.bootcampIds[0]);
+        }
       })
       .catch((error) => {
-        setExpenseFormMessage(
-          error instanceof Error ? error.message : "Data dashboard gagal dimuat.",
-        );
+        if (isMounted) {
+          setExpenseFormMessage(
+            error instanceof Error ? error.message : "Data dashboard gagal dimuat.",
+          );
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingDashboardData(false);
+        }
       });
 
     return () => {
@@ -194,17 +200,24 @@ export function BootcampTrackerApp() {
     };
   }, []);
 
-  const participantBootcamp =
-    managedBootcamps.find(
-      (item) =>
-        item.id === selectedBootcampId &&
+  const participantBootcamp = currentParticipant
+    ? managedBootcamps.find(
+        (item) =>
+          item.id === selectedBootcampId &&
+          currentParticipant.bootcampIds.includes(item.id),
+      ) ??
+      managedBootcamps.find((item) =>
         currentParticipant.bootcampIds.includes(item.id),
-    ) ??
-    managedBootcamps.find((item) => currentParticipant.bootcampIds.includes(item.id)) ??
-    bootcamp;
+      ) ??
+      null
+    : null;
 
   const bootcampParticipants = useMemo(
     () => {
+      if (!currentParticipant || !participantBootcamp) {
+        return [];
+      }
+
       const visibleParticipants = allParticipants.filter((participant) =>
         participant.bootcampIds.includes(participantBootcamp.id),
       );
@@ -215,38 +228,61 @@ export function BootcampTrackerApp() {
         ? visibleParticipants
         : [currentParticipant, ...visibleParticipants];
     },
-    [allParticipants, currentParticipant, participantBootcamp.id],
+    [allParticipants, currentParticipant, participantBootcamp],
   );
 
   const bootcampExpenses = useMemo(
-    () =>
-      allExpenses.filter(
+    () => {
+      if (!participantBootcamp) {
+        return [];
+      }
+
+      return allExpenses.filter(
         (expense) => expense.bootcampId === participantBootcamp.id,
-      ),
-    [allExpenses, participantBootcamp.id],
+      );
+    },
+    [allExpenses, participantBootcamp],
   );
 
   const bootcampNotifications = useMemo(
-    () =>
-      allNotifications.filter(
+    () => {
+      if (!participantBootcamp) {
+        return [];
+      }
+
+      return allNotifications.filter(
         (notification) => notification.bootcampId === participantBootcamp.id,
-      ),
-    [allNotifications, participantBootcamp.id],
+      );
+    },
+    [allNotifications, participantBootcamp],
   );
 
   const summary = useMemo(
-    () => calculateParticipantSummary(currentParticipant.id, bootcampExpenses),
-    [bootcampExpenses, currentParticipant.id],
+    () =>
+      currentParticipant
+        ? calculateParticipantSummary(currentParticipant.id, bootcampExpenses)
+        : {
+            totalPaid: 0,
+            totalOwed: 0,
+            totalReceivable: 0,
+            netBalance: 0,
+          },
+    [bootcampExpenses, currentParticipant],
   );
 
   const settlementRows = useMemo(
-    () =>
-      calculateSettlementRows(bootcampExpenses, participantsById).filter(
+    () => {
+      if (!currentParticipant) {
+        return [];
+      }
+
+      return calculateSettlementRows(bootcampExpenses, participantsById).filter(
         (row) =>
           row.debtorId === currentParticipant.id ||
           row.payerId === currentParticipant.id,
-      ),
-    [bootcampExpenses, currentParticipant.id, participantsById],
+      );
+    },
+    [bootcampExpenses, currentParticipant, participantsById],
   );
 
   const filteredExpenses = useMemo(() => {
@@ -270,13 +306,9 @@ export function BootcampTrackerApp() {
     const visibleParticipantIds = new Set(
       bootcampParticipants.map((participant) => participant.id),
     );
-    const nextSelected = checkedIds.filter((participantId) =>
+    return checkedIds.filter((participantId) =>
       visibleParticipantIds.has(participantId),
     );
-
-    return nextSelected.length > 0
-      ? nextSelected
-      : bootcampParticipants.map((participant) => participant.id);
   }, [bootcampParticipants, checkedIds]);
 
   const splitPreview = useMemo(() => {
@@ -290,6 +322,31 @@ export function BootcampTrackerApp() {
   }, [amount, visibleCheckedIds]);
   const isDashboardBlockingProcess = isSavingExpense;
 
+  if (isLoadingDashboardData) {
+    return (
+      <DashboardDataShimmer
+        as="main"
+        label="Memuat data dashboard peserta..."
+      />
+    );
+  }
+
+  if (!currentParticipant || !participantBootcamp) {
+    return (
+      <main className="min-h-[100dvh] px-4 py-4 text-foreground sm:px-6 lg:px-8">
+        <section className="mx-auto max-w-[720px] rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+          <p className="text-sm font-semibold text-destructive">
+            Data dashboard belum tersedia.
+          </p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            {expenseFormMessage ||
+              "Peserta ini belum terhubung ke bootcamp aktif. Silakan hubungi admin."}
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   function toggleParticipant(participantId: string) {
     setCheckedIds((selected) =>
       selected.includes(participantId)
@@ -300,6 +357,16 @@ export function BootcampTrackerApp() {
 
   async function handleSaveExpense() {
     if (isSavingExpense) {
+      return;
+    }
+
+    if (visibleCheckedIds.length === 0) {
+      setExpenseFormMessage("Pilih minimal satu peserta yang menanggung.");
+      return;
+    }
+
+    if (!currentParticipant || !participantBootcamp) {
+      setExpenseFormMessage("Data peserta atau bootcamp belum tersedia.");
       return;
     }
 
@@ -454,6 +521,94 @@ export function BootcampTrackerApp() {
         </section>
       </div>
     </main>
+  );
+}
+
+function DashboardDataShimmer({
+  as = "section",
+  label,
+}: {
+  as?: "main" | "section";
+  label: string;
+}) {
+  const content = (
+    <div
+      aria-busy="true"
+      aria-label={label}
+      className="mx-auto grid w-full max-w-[1440px] gap-4 lg:grid-cols-[280px_1fr]"
+      role="status"
+    >
+      <aside className="rounded-lg border border-border bg-card p-3 shadow-[0_20px_70px_rgba(23,32,26,0.08)] lg:h-[calc(100dvh-2rem)]">
+        <div className="flex items-center gap-3 border-b border-border px-2 pb-4">
+          <ShimmerBlock className="size-10" />
+          <div className="grid flex-1 gap-2">
+            <ShimmerBlock className="h-4 w-36" />
+            <ShimmerBlock className="h-3 w-28" />
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <ShimmerBlock className="h-10 w-full" key={index} />
+          ))}
+        </div>
+        <div className="mt-5 grid gap-3 rounded-lg bg-muted p-4">
+          <ShimmerBlock className="h-4 w-3/4" />
+          <ShimmerBlock className="h-3 w-full" />
+          <ShimmerBlock className="h-3 w-5/6" />
+          <ShimmerBlock className="h-16 w-full" />
+        </div>
+      </aside>
+
+      <section className="grid gap-4">
+        <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+          <ShimmerBlock className="h-4 w-40" />
+          <ShimmerBlock className="mt-3 h-9 w-64 max-w-full" />
+          <ShimmerBlock className="mt-3 h-4 w-72 max-w-full" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]"
+              key={index}
+            >
+              <ShimmerBlock className="size-10" />
+              <ShimmerBlock className="mt-5 h-3 w-24" />
+              <ShimmerBlock className="mt-3 h-7 w-32" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+          <ShimmerBlock className="h-6 w-52" />
+          <div className="mt-5 grid gap-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <ShimmerBlock className="h-12 w-full" key={index} />
+            ))}
+          </div>
+        </div>
+      </section>
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+
+  if (as === "main") {
+    return (
+      <main className="min-h-[100dvh] px-4 py-4 text-foreground sm:px-6 lg:px-8">
+        {content}
+      </main>
+    );
+  }
+
+  return content;
+}
+
+function ShimmerBlock({ className }: { className: string }) {
+  return (
+    <div
+      className={[
+        "animate-pulse rounded-md bg-muted",
+        className,
+      ].join(" ")}
+    />
   );
 }
 
@@ -850,7 +1005,7 @@ function AddExpensePanel({
         </div>
         <button
           className="focus-ring mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
-          disabled={isSavingExpense}
+          disabled={isSavingExpense || checkedIds.length === 0}
           onClick={onSaveExpense}
           type="button"
         >
@@ -956,9 +1111,9 @@ function NotificationsPanel({
 export function AdminWorkspace() {
   const router = useRouter();
   const [activeAdminView, setActiveAdminView] = useState<AdminView>("summary");
-  const [managedBootcamps, setManagedBootcamps] = useState(bootcamps);
-  const [allParticipants, setAllParticipants] = useState(participants);
-  const [allExpenses, setAllExpenses] = useState(expenses);
+  const [managedBootcamps, setManagedBootcamps] = useState<BootcampRecord[]>([]);
+  const [allParticipants, setAllParticipants] = useState<ParticipantRecord[]>([]);
+  const [allExpenses, setAllExpenses] = useState<ExpenseRecord[]>([]);
   const [newBootcampName, setNewBootcampName] = useState("");
   const [newBootcampLocation, setNewBootcampLocation] = useState("");
   const [newBootcampStartDate, setNewBootcampStartDate] = useState("");
@@ -982,6 +1137,7 @@ export function AdminWorkspace() {
   const [isSavingBootcamp, setIsSavingBootcamp] = useState(false);
   const [isCreatingParticipant, setIsCreatingParticipant] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isLoadingAdminData, setIsLoadingAdminData] = useState(true);
   const [deletingBootcampId, setDeletingBootcampId] = useState<string | null>(
     null,
   );
@@ -1011,9 +1167,16 @@ export function AdminWorkspace() {
         );
       })
       .catch((error) => {
-        setAdminMessage(
-          error instanceof Error ? error.message : "Data admin gagal dimuat.",
-        );
+        if (isMounted) {
+          setAdminMessage(
+            error instanceof Error ? error.message : "Data admin gagal dimuat.",
+          );
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingAdminData(false);
+        }
       });
 
     return () => {
@@ -1053,6 +1216,10 @@ export function AdminWorkspace() {
         : isDeletingRecord
           ? "Menghapus data..."
           : "Memproses...";
+
+  if (isLoadingAdminData) {
+    return <DashboardDataShimmer label="Memuat data admin..." />;
+  }
 
   async function handleAdminLogout() {
     if (isLoggingOut) {
