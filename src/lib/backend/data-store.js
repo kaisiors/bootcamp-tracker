@@ -632,15 +632,25 @@ async function dropTables(client) {
 }
 
 async function seedInitialData(client) {
-  const existing = await client.query("SELECT COUNT(*)::int AS total FROM bootcamps");
+  const existing = await client.query(`
+    SELECT
+      (SELECT COUNT(*)::int FROM users) AS users,
+      (SELECT COUNT(*)::int FROM bootcamps) AS bootcamps,
+      (SELECT COUNT(*)::int FROM participants) AS participants
+  `);
+  const existingDataCount =
+    existing.rows[0].users +
+    existing.rows[0].bootcamps +
+    existing.rows[0].participants;
 
-  if (existing.rows[0].total > 0) {
+  if (existingDataCount > 0) {
     return;
   }
 
   await client.query(
     `INSERT INTO users (id, email, name, role, password_hash, participant_id)
-     VALUES ($1, $2, $3, 'ADMIN', $4, NULL)`,
+     VALUES ($1, $2, $3, 'ADMIN', $4, NULL)
+     ON CONFLICT DO NOTHING`,
     ["admin", "admin@bootcamp.test", "Admin Bootcamp", hashPassword("password")],
   );
 
@@ -648,7 +658,8 @@ async function seedInitialData(client) {
     await client.query(
       `INSERT INTO bootcamps
        (id, name, location, start_date, end_date, payment_deadline, status, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT DO NOTHING`,
       [
         bootcamp.id,
         bootcamp.name,
@@ -667,18 +678,21 @@ async function seedInitialData(client) {
 
     await client.query(
       `INSERT INTO users (id, email, name, role, participant_id)
-       VALUES ($1, $2, $3, 'PARTICIPANT', $4)`,
+       VALUES ($1, $2, $3, 'PARTICIPANT', $4)
+       ON CONFLICT DO NOTHING`,
       [userId, participant.email, participant.name, participant.id],
     );
     await client.query(
       `INSERT INTO participants (id, user_id, name, email, phone, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT DO NOTHING`,
       [participant.id, userId, participant.name, participant.email, participant.phone, index],
     );
     await client.query(
       `INSERT INTO bank_accounts
        (participant_id, bank_name, account_number, account_holder_name)
-       VALUES ($1, $2, $3, $4)`,
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT DO NOTHING`,
       [
         participant.id,
         participant.bank.bankName,
@@ -689,7 +703,9 @@ async function seedInitialData(client) {
 
     for (const bootcampId of participant.bootcampIds) {
       await client.query(
-        "INSERT INTO bootcamp_participants (bootcamp_id, participant_id) VALUES ($1, $2)",
+        `INSERT INTO bootcamp_participants (bootcamp_id, participant_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
         [bootcampId, participant.id],
       );
     }
@@ -699,7 +715,8 @@ async function seedInitialData(client) {
     await client.query(
       `INSERT INTO expenses
        (id, title, amount, bootcamp_id, expense_date, payer_id, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT DO NOTHING`,
       [
         expense.id,
         expense.title,
@@ -714,7 +731,8 @@ async function seedInitialData(client) {
     for (const split of expense.participants) {
       await client.query(
         `INSERT INTO expense_splits (expense_id, participant_id, share_amount)
-         VALUES ($1, $2, $3)`,
+         VALUES ($1, $2, $3)
+         ON CONFLICT DO NOTHING`,
         [expense.id, split.userId, split.shareAmount],
       );
     }
@@ -724,7 +742,8 @@ async function seedInitialData(client) {
     await client.query(
       `INSERT INTO notifications
        (id, bootcamp_id, type, title, message, sent_at, is_read)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT DO NOTHING`,
       [
         notification.id,
         notification.bootcampId,

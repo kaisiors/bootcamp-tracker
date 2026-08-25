@@ -305,4 +305,20 @@ describe("backend data store", () => {
 
     assert.equal(recreated.participant.email, "peserta.hapus@mail.test");
   });
+
+  it("does not reseed default users when bootcamps are empty but users still exist", async () => {
+    await resetAppState();
+
+    const state = await getAppState();
+    const participantId = state.participants[0].id;
+
+    await adminClient.query(`DELETE FROM ${testSchema}.bootcamps`);
+
+    const nextState = await deleteParticipant(participantId);
+
+    assert.equal(nextState.bootcamps.length, 0);
+    assert.ok(
+      !nextState.participants.some((participant) => participant.id === participantId),
+    );
+  });
 });
