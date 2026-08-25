@@ -15,6 +15,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   LogIn,
+  LogOut,
   Mail,
   Pencil,
   Plus,
@@ -25,6 +26,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -43,6 +45,7 @@ import {
   deleteExpense as requestDeleteExpense,
   deleteParticipant as requestDeleteParticipant,
   getAppState as fetchAppState,
+  logout as requestLogout,
   updateBootcamp as requestUpdateBootcamp,
 } from "../lib/api-client.js";
 import {
@@ -945,6 +948,7 @@ function NotificationsPanel({
 }
 
 export function AdminWorkspace() {
+  const router = useRouter();
   const [activeAdminView, setActiveAdminView] = useState<AdminView>("summary");
   const [managedBootcamps, setManagedBootcamps] = useState(bootcamps);
   const [allParticipants, setAllParticipants] = useState(participants);
@@ -973,6 +977,7 @@ export function AdminWorkspace() {
   const [adminMessage, setAdminMessage] = useState("");
   const [isSavingBootcamp, setIsSavingBootcamp] = useState(false);
   const [isCreatingParticipant, setIsCreatingParticipant] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [deletingBootcampId, setDeletingBootcampId] = useState<string | null>(
     null,
   );
@@ -1031,6 +1036,24 @@ export function AdminWorkspace() {
   const isDeletingRecord = Boolean(
     deletingBootcampId || deletingParticipantId || deletingExpenseId,
   );
+
+  async function handleAdminLogout() {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+
+    try {
+      await requestLogout();
+      router.push("/admin");
+    } catch (error) {
+      setAdminMessage(
+        error instanceof Error ? error.message : "Logout admin gagal diproses.",
+      );
+      setIsLoggingOut(false);
+    }
+  }
 
   async function handleSubmitBootcamp(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1265,29 +1288,44 @@ export function AdminWorkspace() {
             Scope admin: semua bootcamp, semua peserta, dan transaksi lintas batch.
           </p>
         </div>
-        <nav className="grid gap-2 sm:grid-cols-2 md:grid-cols-5">
-          {adminNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeAdminView === item.id;
+        <div className="grid gap-3">
+          <nav className="grid gap-2 sm:grid-cols-2 md:grid-cols-5">
+            {adminNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeAdminView === item.id;
 
-            return (
-              <button
-                className={[
-                  "focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold transition active:translate-y-px",
-                  isActive
-                    ? "bg-accent text-accent-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-                key={item.id}
-                onClick={() => setActiveAdminView(item.id)}
-                type="button"
-              >
-                <Icon size={17} strokeWidth={1.8} />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
+              return (
+                <button
+                  className={[
+                    "focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold transition active:translate-y-px",
+                    isActive
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground",
+                  ].join(" ")}
+                  key={item.id}
+                  onClick={() => setActiveAdminView(item.id)}
+                  type="button"
+                >
+                  <Icon size={17} strokeWidth={1.8} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0 md:justify-self-end"
+            disabled={isLoggingOut}
+            onClick={handleAdminLogout}
+            type="button"
+          >
+            {isLoggingOut ? (
+              <LoaderCircle className="animate-spin" size={17} strokeWidth={1.8} />
+            ) : (
+              <LogOut size={17} strokeWidth={1.8} />
+            )}
+            {isLoggingOut ? "Keluar..." : "Keluar"}
+          </button>
+        </div>
       </header>
 
       {adminMessage ? (

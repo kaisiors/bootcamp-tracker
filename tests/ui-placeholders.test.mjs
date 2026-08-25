@@ -100,3 +100,23 @@ describe("dashboard destructive and async states", () => {
     }
   });
 });
+
+describe("admin session controls", () => {
+  it("shows an admin logout button backed by the logout API", () => {
+    for (const logoutRequirement of [
+      "requestLogout",
+      "handleAdminLogout",
+      "isLoggingOut",
+      "Keluar",
+      "Keluar...",
+      'router.push("/admin")',
+      "LogOut",
+    ]) {
+      assert.equal(
+        trackerApp.includes(logoutRequirement),
+        true,
+        `${logoutRequirement} should be represented in the admin logout flow`,
+      );
+    }
+  });
+});
