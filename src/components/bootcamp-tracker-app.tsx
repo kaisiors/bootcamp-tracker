@@ -388,6 +388,8 @@ export function BootcampTrackerApp() {
       setAllNotifications(result.state.notifications);
       setTitle("");
       setAmount("");
+      setExpenseDate("");
+      setCheckedIds([]);
       setExpenseFormMessage("Pengeluaran tersimpan dan langsung masuk rekap.");
       setActiveView("transactions");
     } catch (error) {

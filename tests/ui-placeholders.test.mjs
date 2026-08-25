@@ -287,4 +287,25 @@ describe("expense participant selection", () => {
       "an empty expense participant selection should stay empty instead of selecting every participant",
     );
   });
+
+  it("clears expense date and checked participants after a saved expense", () => {
+    const successIndex = trackerApp.indexOf(
+      'setExpenseFormMessage("Pengeluaran tersimpan dan langsung masuk rekap.")',
+    );
+
+    assert.notEqual(successIndex, -1, "expense save success branch should exist");
+
+    const saveSuccessBlock = trackerApp.slice(
+      Math.max(0, successIndex - 500),
+      successIndex + 500,
+    );
+
+    for (const resetCall of ['setExpenseDate("");', "setCheckedIds([]);"]) {
+      assert.equal(
+        saveSuccessBlock.includes(resetCall),
+        true,
+        `${resetCall} should run after the expense is saved`,
+      );
+    }
+  });
 });
