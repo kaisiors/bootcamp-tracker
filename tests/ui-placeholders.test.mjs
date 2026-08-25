@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const authPages = readFileSync("src/components/auth-pages.tsx", "utf8");
 const trackerApp = readFileSync("src/components/bootcamp-tracker-app.tsx", "utf8");
+const fullPageOverlayPath = "src/components/full-page-loading-overlay.tsx";
+const fullPageOverlay = existsSync(fullPageOverlayPath)
+  ? readFileSync(fullPageOverlayPath, "utf8")
+  : "";
 
 describe("empty text fields use placeholders", () => {
   it("does not prefill auth form text fields with demo values", () => {
@@ -161,6 +165,57 @@ describe("admin session controls", () => {
         trackerApp.includes(logoutRequirement),
         true,
         `${logoutRequirement} should be represented in the admin logout flow`,
+      );
+    }
+  });
+});
+
+describe("blocking process loading overlays", () => {
+  it("defines a full-page loading overlay component", () => {
+    for (const overlayRequirement of [
+      "FullPageLoadingOverlay",
+      "fixed inset-0",
+      "aria-busy",
+      'role="status"',
+      "LoaderCircle",
+    ]) {
+      assert.equal(
+        fullPageOverlay.includes(overlayRequirement),
+        true,
+        `${overlayRequirement} should exist in the full-page loading overlay`,
+      );
+    }
+  });
+
+  it("covers auth pages during login and registration processes", () => {
+    for (const authRequirement of [
+      "FullPageLoadingOverlay",
+      "Memproses login peserta...",
+      "Menyimpan pendaftaran peserta...",
+      "Memproses login admin...",
+      "isSubmitting",
+    ]) {
+      assert.equal(
+        authPages.includes(authRequirement),
+        true,
+        `${authRequirement} should be used by auth process overlays`,
+      );
+    }
+  });
+
+  it("covers dashboard pages during save, edit, and logout processes", () => {
+    for (const dashboardRequirement of [
+      "FullPageLoadingOverlay",
+      "isDashboardBlockingProcess",
+      "isAdminBlockingProcess",
+      "Menyimpan pengeluaran...",
+      "Menyimpan perubahan bootcamp...",
+      "Memproses logout admin...",
+    ]) {
+      assert.equal(
+        trackerApp.includes(dashboardRequirement),
+        true,
+        `${dashboardRequirement} should be used by dashboard process overlays`,
       );
     }
   });

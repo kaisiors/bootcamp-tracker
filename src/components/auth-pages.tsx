@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { FullPageLoadingOverlay } from "./full-page-loading-overlay";
 import {
   createParticipant,
   getAppState,
@@ -98,6 +99,10 @@ export function ParticipantLoginPage() {
 
   return (
     <AuthShell>
+      <FullPageLoadingOverlay
+        isVisible={isSubmitting}
+        message="Memproses login peserta..."
+      />
       <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
         <WalletCards size={25} strokeWidth={1.8} />
       </div>
@@ -264,6 +269,10 @@ export function ParticipantRegistrationPage() {
 
   return (
     <AuthShell>
+      <FullPageLoadingOverlay
+        isVisible={isSubmitting}
+        message="Menyimpan pendaftaran peserta..."
+      />
       <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
         <UserPlus size={25} strokeWidth={1.8} />
       </div>
@@ -415,6 +424,10 @@ export function AdminLoginPage() {
 
   return (
     <AuthShell>
+      <FullPageLoadingOverlay
+        isVisible={isSubmitting}
+        message="Memproses login admin..."
+      />
       <div className="grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground">
         <ShieldCheck size={25} strokeWidth={1.8} />
       </div>

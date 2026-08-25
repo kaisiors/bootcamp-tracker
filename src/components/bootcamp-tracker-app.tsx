@@ -29,6 +29,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { FullPageLoadingOverlay } from "./full-page-loading-overlay";
 import {
   loadSelectedBootcampId,
   saveSelectedBootcampId,
@@ -287,6 +288,7 @@ export function BootcampTrackerApp() {
 
     return splitExpenseEvenly(numericAmount, visibleCheckedIds);
   }, [amount, visibleCheckedIds]);
+  const isDashboardBlockingProcess = isSavingExpense;
 
   function toggleParticipant(participantId: string) {
     setCheckedIds((selected) =>
@@ -332,6 +334,10 @@ export function BootcampTrackerApp() {
 
   return (
     <main className="min-h-[100dvh] px-4 py-4 text-foreground sm:px-6 lg:px-8">
+      <FullPageLoadingOverlay
+        isVisible={isDashboardBlockingProcess}
+        message="Menyimpan pengeluaran..."
+      />
       <div className="mx-auto grid max-w-[1440px] gap-4 lg:grid-cols-[280px_1fr]">
         <aside className="rounded-lg border border-border bg-card p-3 shadow-[0_20px_70px_rgba(23,32,26,0.08)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)]">
           <div className="flex items-center gap-3 border-b border-border px-2 pb-4">
@@ -1034,6 +1040,19 @@ export function AdminWorkspace() {
   const isDeletingRecord = Boolean(
     deletingBootcampId || deletingParticipantId || deletingExpenseId,
   );
+  const isAdminBlockingProcess =
+    isSavingBootcamp || isCreatingParticipant || isLoggingOut || isDeletingRecord;
+  const adminBlockingMessage = isLoggingOut
+    ? "Memproses logout admin..."
+    : isSavingBootcamp
+      ? editingBootcampId
+        ? "Menyimpan perubahan bootcamp..."
+        : "Menyimpan bootcamp baru..."
+      : isCreatingParticipant
+        ? "Menyimpan peserta baru..."
+        : isDeletingRecord
+          ? "Menghapus data..."
+          : "Memproses...";
 
   async function handleAdminLogout() {
     if (isLoggingOut) {
@@ -1277,6 +1296,10 @@ export function AdminWorkspace() {
 
   return (
     <section className="grid gap-4">
+      <FullPageLoadingOverlay
+        isVisible={isAdminBlockingProcess}
+        message={adminBlockingMessage}
+      />
       <header className="grid gap-4 rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)] xl:grid-cols-[1fr_auto] xl:items-end">
         <div>
           <p className="text-sm font-medium text-accent-foreground">Admin workspace</p>
