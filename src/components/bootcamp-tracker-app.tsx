@@ -102,6 +102,7 @@ const adminNavItems = [
 ] satisfies Array<{ id: AdminView; label: string; icon: typeof LayoutDashboard }>;
 
 export function BootcampTrackerApp() {
+  const router = useRouter();
   const [activeView, setActiveView] = useState<View>("overview");
   const [managedBootcamps, setManagedBootcamps] = useState<BootcampRecord[]>([]);
   const [allParticipants, setAllParticipants] = useState<ParticipantRecord[]>([]);
@@ -115,6 +116,7 @@ export function BootcampTrackerApp() {
   const [expenseDate, setExpenseDate] = useState("");
   const [expenseFormMessage, setExpenseFormMessage] = useState("");
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [isLoggingOutParticipant, setIsLoggingOutParticipant] = useState(false);
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
 
@@ -320,7 +322,10 @@ export function BootcampTrackerApp() {
 
     return splitExpenseEvenly(numericAmount, visibleCheckedIds);
   }, [amount, visibleCheckedIds]);
-  const isDashboardBlockingProcess = isSavingExpense;
+  const isDashboardBlockingProcess = isSavingExpense || isLoggingOutParticipant;
+  const dashboardBlockingMessage = isLoggingOutParticipant
+    ? "Memproses logout peserta..."
+    : "Menyimpan pengeluaran...";
 
   if (isLoadingDashboardData) {
     return (
@@ -353,6 +358,24 @@ export function BootcampTrackerApp() {
         ? selected.filter((id) => id !== participantId)
         : [...selected, participantId],
     );
+  }
+
+  async function handleParticipantLogout() {
+    if (isLoggingOutParticipant) {
+      return;
+    }
+
+    setIsLoggingOutParticipant(true);
+
+    try {
+      await requestLogout();
+      router.push("/");
+    } catch (error) {
+      setExpenseFormMessage(
+        error instanceof Error ? error.message : "Logout peserta gagal diproses.",
+      );
+      setIsLoggingOutParticipant(false);
+    }
   }
 
   async function handleSaveExpense() {
@@ -405,7 +428,7 @@ export function BootcampTrackerApp() {
     <main className="min-h-[100dvh] px-4 py-4 text-foreground sm:px-6 lg:px-8">
       <FullPageLoadingOverlay
         isVisible={isDashboardBlockingProcess}
-        message="Menyimpan pengeluaran..."
+        message={dashboardBlockingMessage}
       />
       <div className="mx-auto grid max-w-[1440px] gap-4 lg:grid-cols-[280px_1fr]">
         <aside className="rounded-lg border border-border bg-card p-3 shadow-[0_20px_70px_rgba(23,32,26,0.08)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)]">
@@ -464,6 +487,21 @@ export function BootcampTrackerApp() {
               </div>
             </div>
           </div>
+
+          <button
+            className="focus-ring mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
+            disabled={isLoggingOutParticipant}
+            onClick={handleParticipantLogout}
+            title="Keluar dari dashboard peserta"
+            type="button"
+          >
+            {isLoggingOutParticipant ? (
+              <LoaderCircle className="animate-spin" size={17} strokeWidth={1.8} />
+            ) : (
+              <LogOut size={17} strokeWidth={1.8} />
+            )}
+            {isLoggingOutParticipant ? "Keluar..." : "Keluar"}
+          </button>
         </aside>
 
         <section className="grid gap-4">

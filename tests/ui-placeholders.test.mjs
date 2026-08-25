@@ -168,6 +168,22 @@ describe("admin session controls", () => {
       );
     }
   });
+
+  it("shows a participant logout button in the sidebar backed by the logout API", () => {
+    for (const participantLogoutRequirement of [
+      "handleParticipantLogout",
+      "isLoggingOutParticipant",
+      "Memproses logout peserta...",
+      'router.push("/")',
+      "Keluar dari dashboard peserta",
+    ]) {
+      assert.equal(
+        trackerApp.includes(participantLogoutRequirement),
+        true,
+        `${participantLogoutRequirement} should be represented in the participant logout flow`,
+      );
+    }
+  });
 });
 
 describe("blocking process loading overlays", () => {
