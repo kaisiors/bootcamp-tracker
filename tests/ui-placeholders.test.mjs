@@ -210,6 +210,34 @@ describe("participant dashboard overview", () => {
   });
 });
 
+describe("participant settlement views", () => {
+  it("opens payable and receivable detail lists from overview metrics", () => {
+    for (const settlementViewRequirement of [
+      '"payables"',
+      '"receivables"',
+      "onOpenPayables",
+      "onOpenReceivables",
+      "PayableSettlementsPanel",
+      "ReceivableSettlementsPanel",
+      "PaymentConfirmationDialog",
+      "requestRecordSettlementPayment",
+      "buildParticipantSettlementGroups",
+      "Tagihan yang harus dibayar",
+      "Piutang yang harus diterima",
+      "Sudah bayar",
+      "Belum bayar",
+      "Nomor rekening",
+      "Bayar",
+    ]) {
+      assert.equal(
+        trackerApp.includes(settlementViewRequirement),
+        true,
+        `${settlementViewRequirement} should be represented in participant settlement views`,
+      );
+    }
+  });
+});
+
 describe("admin session controls", () => {
   it("shows an admin logout button backed by the logout API", () => {
     for (const logoutRequirement of [

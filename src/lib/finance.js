@@ -76,6 +76,66 @@ export function calculateSettlementRows(expenses, usersById) {
   return rows;
 }
 
+export function buildParticipantSettlementGroups(
+  settlementRows,
+  participantsById,
+  participantId,
+  mode,
+  settlementPayments = [],
+) {
+  const groupsByParticipant = new Map();
+  const paymentIndex = new Map(
+    settlementPayments.map((payment) => [createSettlementPaymentKey(payment), payment]),
+  );
+
+  for (const row of settlementRows) {
+    const isPayable = mode === "payable" && row.debtorId === participantId;
+    const isReceivable = mode === "receivable" && row.payerId === participantId;
+
+    if (!isPayable && !isReceivable) {
+      continue;
+    }
+
+    const counterpartyId = isPayable ? row.payerId : row.debtorId;
+    const counterpartyName = isPayable ? row.payerName : row.debtorName;
+    const participant = participantsById[counterpartyId];
+    const payment = paymentIndex.get(createSettlementPaymentKey(row));
+    const item = {
+      amount: Number(row.amount),
+      debtorId: row.debtorId,
+      expenseId: row.expenseId,
+      paidAt: payment?.paidAt ?? null,
+      payerId: row.payerId,
+      status: payment ? "paid" : "unpaid",
+      title: row.title,
+    };
+
+    if (!groupsByParticipant.has(counterpartyId)) {
+      groupsByParticipant.set(counterpartyId, {
+        bank: participant?.bank ?? null,
+        items: [],
+        paidAmount: 0,
+        participantId: counterpartyId,
+        participantName: participant?.name ?? counterpartyName,
+        totalAmount: 0,
+        unpaidAmount: 0,
+      });
+    }
+
+    const group = groupsByParticipant.get(counterpartyId);
+    group.items.push(item);
+    group.totalAmount += item.amount;
+
+    if (item.status === "paid") {
+      group.paidAmount += item.amount;
+    } else {
+      group.unpaidAmount += item.amount;
+    }
+  }
+
+  return [...groupsByParticipant.values()];
+}
+
 export function formatRupiah(value) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -84,4 +144,8 @@ export function formatRupiah(value) {
   })
     .format(value)
     .replace(/\s/g, "");
+}
+
+function createSettlementPaymentKey(item) {
+  return `${item.expenseId}:${item.debtorId}:${item.payerId}`;
 }

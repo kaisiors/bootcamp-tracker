@@ -46,6 +46,7 @@ import {
   deleteParticipant as requestDeleteParticipant,
   getAppState as fetchAppState,
   logout as requestLogout,
+  recordSettlementPayment as requestRecordSettlementPayment,
   updateBootcamp as requestUpdateBootcamp,
   updateExpense as requestUpdateExpense,
 } from "../lib/api-client.js";
@@ -56,13 +57,21 @@ import {
   participants,
 } from "../lib/mock-data.js";
 import {
+  buildParticipantSettlementGroups,
   calculateParticipantSummary,
   calculateSettlementRows,
   formatRupiah,
   splitExpenseEvenly,
 } from "../lib/finance.js";
 
-type View = "overview" | "transactions" | "add" | "members" | "notifications";
+type View =
+  | "overview"
+  | "transactions"
+  | "add"
+  | "members"
+  | "notifications"
+  | "payables"
+  | "receivables";
 
 const currentUserId = "bima";
 
@@ -70,6 +79,35 @@ type BootcampRecord = (typeof bootcamps)[number];
 type ExpenseRecord = (typeof expenses)[number];
 type NotificationRecord = (typeof notifications)[number];
 type ParticipantRecord = (typeof participants)[number];
+type SettlementPaymentRecord = {
+  debtorId: string;
+  expenseId: string;
+  id: string;
+  paidAt: string;
+  payerId: string;
+};
+type SettlementPaymentItem = {
+  amount: number;
+  debtorId: string;
+  expenseId: string;
+  paidAt: string | null;
+  payerId: string;
+  status: "paid" | "unpaid";
+  title: string;
+};
+type SettlementPaymentGroup = {
+  bank: ParticipantRecord["bank"] | null;
+  items: SettlementPaymentItem[];
+  paidAmount: number;
+  participantId: string;
+  participantName: string;
+  totalAmount: number;
+  unpaidAmount: number;
+};
+type PaymentTarget = SettlementPaymentItem & {
+  bank: ParticipantRecord["bank"] | null;
+  recipientName: string;
+};
 type AdminView =
   | "summary"
   | "bootcamps"
@@ -108,6 +146,9 @@ export function BootcampTrackerApp() {
   const [allParticipants, setAllParticipants] = useState<ParticipantRecord[]>([]);
   const [allExpenses, setAllExpenses] = useState<ExpenseRecord[]>([]);
   const [allNotifications, setAllNotifications] = useState<NotificationRecord[]>([]);
+  const [allSettlementPayments, setAllSettlementPayments] = useState<
+    SettlementPaymentRecord[]
+  >([]);
   const [selectedParticipantId, setSelectedParticipantId] = useState("");
   const [selectedBootcampId, setSelectedBootcampId] = useState("");
   const [query, setQuery] = useState("");
@@ -129,6 +170,9 @@ export function BootcampTrackerApp() {
     setParticipantEditExpenseParticipantIds,
   ] = useState<string[]>([]);
   const [isSavingParticipantExpenseEdit, setIsSavingParticipantExpenseEdit] =
+    useState(false);
+  const [paymentTarget, setPaymentTarget] = useState<PaymentTarget | null>(null);
+  const [isSavingSettlementPayment, setIsSavingSettlementPayment] =
     useState(false);
   const [isLoggingOutParticipant, setIsLoggingOutParticipant] = useState(false);
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
@@ -179,6 +223,7 @@ export function BootcampTrackerApp() {
         setAllParticipants(state.participants);
         setAllExpenses(state.expenses);
         setAllNotifications(state.notifications);
+        setAllSettlementPayments(state.settlementPayments ?? []);
 
         if (nextParticipant) {
           setSelectedParticipantId(nextParticipant.id);
@@ -301,6 +346,42 @@ export function BootcampTrackerApp() {
     [bootcampExpenses, currentParticipant, participantsById],
   );
 
+  const payableGroups = useMemo<SettlementPaymentGroup[]>(() => {
+    if (!currentParticipant) {
+      return [];
+    }
+
+    return buildParticipantSettlementGroups(
+      settlementRows,
+      participantsById,
+      currentParticipant.id,
+      "payable",
+      allSettlementPayments,
+    );
+  }, [allSettlementPayments, currentParticipant, participantsById, settlementRows]);
+
+  const receivableGroups = useMemo<SettlementPaymentGroup[]>(() => {
+    if (!currentParticipant) {
+      return [];
+    }
+
+    return buildParticipantSettlementGroups(
+      settlementRows,
+      participantsById,
+      currentParticipant.id,
+      "receivable",
+      allSettlementPayments,
+    );
+  }, [allSettlementPayments, currentParticipant, participantsById, settlementRows]);
+  const payableTotal = payableGroups.reduce(
+    (total, group) => total + group.unpaidAmount,
+    0,
+  );
+  const receivableTotal = receivableGroups.reduce(
+    (total, group) => total + group.unpaidAmount,
+    0,
+  );
+
   const filteredExpenses = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -346,9 +427,14 @@ export function BootcampTrackerApp() {
     return splitExpenseEvenly(numericAmount, visibleCheckedIds);
   }, [amount, visibleCheckedIds]);
   const isDashboardBlockingProcess =
-    isSavingExpense || isSavingParticipantExpenseEdit || isLoggingOutParticipant;
+    isSavingExpense ||
+    isSavingParticipantExpenseEdit ||
+    isSavingSettlementPayment ||
+    isLoggingOutParticipant;
   const dashboardBlockingMessage = isLoggingOutParticipant
     ? "Memproses logout peserta..."
+    : isSavingSettlementPayment
+      ? "Memproses pembayaran..."
     : isSavingParticipantExpenseEdit
       ? "Menyimpan perubahan pengeluaran..."
       : "Menyimpan pengeluaran...";
@@ -453,6 +539,7 @@ export function BootcampTrackerApp() {
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
       setAllNotifications(result.state.notifications);
+      setAllSettlementPayments(result.state.settlementPayments ?? []);
       resetParticipantExpenseEditForm();
       setExpenseFormMessage("Perubahan pengeluaran tersimpan.");
     } catch (error) {
@@ -461,6 +548,52 @@ export function BootcampTrackerApp() {
       );
     } finally {
       setIsSavingParticipantExpenseEdit(false);
+    }
+  }
+
+  function startSettlementPayment(
+    item: SettlementPaymentItem,
+    group: SettlementPaymentGroup,
+  ) {
+    if (item.status === "paid") {
+      return;
+    }
+
+    setPaymentTarget({
+      ...item,
+      bank: group.bank,
+      recipientName: group.participantName,
+    });
+    setExpenseFormMessage("");
+  }
+
+  async function handleConfirmSettlementPayment() {
+    if (!paymentTarget || isSavingSettlementPayment) {
+      return;
+    }
+
+    setIsSavingSettlementPayment(true);
+
+    try {
+      const result = await requestRecordSettlementPayment({
+        debtorId: currentParticipant.id,
+        expenseId: paymentTarget.expenseId,
+        payerId: paymentTarget.payerId,
+      });
+
+      setManagedBootcamps(result.state.bootcamps);
+      setAllParticipants(result.state.participants);
+      setAllExpenses(result.state.expenses);
+      setAllNotifications(result.state.notifications);
+      setAllSettlementPayments(result.state.settlementPayments ?? []);
+      setPaymentTarget(null);
+      setExpenseFormMessage("Pembayaran ditandai sudah bayar.");
+    } catch (error) {
+      setExpenseFormMessage(
+        error instanceof Error ? error.message : "Pembayaran gagal diproses.",
+      );
+    } finally {
+      setIsSavingSettlementPayment(false);
     }
   }
 
@@ -513,6 +646,7 @@ export function BootcampTrackerApp() {
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
       setAllNotifications(result.state.notifications);
+      setAllSettlementPayments(result.state.settlementPayments ?? []);
       setTitle("");
       setAmount("");
       setExpenseDate("");
@@ -534,6 +668,14 @@ export function BootcampTrackerApp() {
         isVisible={isDashboardBlockingProcess}
         message={dashboardBlockingMessage}
       />
+      {paymentTarget ? (
+        <PaymentConfirmationDialog
+          isSaving={isSavingSettlementPayment}
+          onCancel={() => setPaymentTarget(null)}
+          onConfirm={handleConfirmSettlementPayment}
+          payment={paymentTarget}
+        />
+      ) : null}
       <div className="mx-auto grid max-w-[1440px] gap-4 lg:grid-cols-[280px_1fr]">
         <aside className="rounded-lg border border-border bg-card p-3 shadow-[0_20px_70px_rgba(23,32,26,0.08)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)]">
           <div className="flex items-center gap-3 border-b border-border px-2 pb-4">
@@ -618,7 +760,11 @@ export function BootcampTrackerApp() {
           {activeView === "overview" ? (
             <OverviewPanel
               activeBootcamp={participantBootcamp}
+              onOpenPayables={() => setActiveView("payables")}
+              onOpenReceivables={() => setActiveView("receivables")}
               participant={currentParticipant}
+              payableTotal={payableTotal}
+              receivableTotal={receivableTotal}
               settlementRows={settlementRows}
               summary={summary}
             />
@@ -647,6 +793,21 @@ export function BootcampTrackerApp() {
               toggleParticipantExpenseEditParticipant={
                 toggleParticipantExpenseEditParticipant
               }
+            />
+          ) : null}
+
+          {activeView === "payables" ? (
+            <PayableSettlementsPanel
+              groups={payableGroups}
+              onBack={() => setActiveView("overview")}
+              onPay={startSettlementPayment}
+            />
+          ) : null}
+
+          {activeView === "receivables" ? (
+            <ReceivableSettlementsPanel
+              groups={receivableGroups}
+              onBack={() => setActiveView("overview")}
             />
           ) : null}
 
@@ -787,6 +948,8 @@ function Header({
     add: "Tambah pengeluaran",
     members: "Daftar peserta",
     notifications: "Riwayat notifikasi",
+    payables: "Tagihan saya",
+    receivables: "Piutang saya",
   };
 
   return (
@@ -813,12 +976,20 @@ function Header({
 
 function OverviewPanel({
   activeBootcamp,
+  onOpenPayables,
+  onOpenReceivables,
   participant,
+  payableTotal,
+  receivableTotal,
   settlementRows,
   summary,
 }: {
   activeBootcamp: BootcampRecord;
+  onOpenPayables: () => void;
+  onOpenReceivables: () => void;
   participant: ParticipantRecord;
+  payableTotal: number;
+  receivableTotal: number;
   settlementRows: Array<Record<string, string | number>>;
   summary: {
     totalPaid: number;
@@ -838,12 +1009,14 @@ function OverviewPanel({
         <MetricCard
           icon={ReceiptText}
           label="Tagihan saya"
-          value={formatRupiah(summary.totalOwed)}
+          onClick={onOpenPayables}
+          value={formatRupiah(payableTotal)}
         />
         <MetricCard
           icon={Banknote}
           label="Piutang saya"
-          value={formatRupiah(summary.totalReceivable)}
+          onClick={onOpenReceivables}
+          value={formatRupiah(receivableTotal)}
         />
       </section>
 
@@ -890,6 +1063,276 @@ function OverviewPanel({
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function PayableSettlementsPanel({
+  groups,
+  onBack,
+  onPay,
+}: {
+  groups: SettlementPaymentGroup[];
+  onBack: () => void;
+  onPay: (item: SettlementPaymentItem, group: SettlementPaymentGroup) => void;
+}) {
+  return (
+    <section className="grid gap-4">
+      <SettlementPanelHeader
+        icon={ReceiptText}
+        onBack={onBack}
+        title="Tagihan yang harus dibayar"
+      />
+
+      {groups.length === 0 ? (
+        <SettlementEmptyState message="Tidak ada tagihan yang perlu dibayar." />
+      ) : (
+        groups.map((group) => (
+          <SettlementGroupCard
+            group={group}
+            key={group.participantId}
+            mode="payable"
+            onPay={onPay}
+          />
+        ))
+      )}
+    </section>
+  );
+}
+
+function ReceivableSettlementsPanel({
+  groups,
+  onBack,
+}: {
+  groups: SettlementPaymentGroup[];
+  onBack: () => void;
+}) {
+  return (
+    <section className="grid gap-4">
+      <SettlementPanelHeader
+        icon={Banknote}
+        onBack={onBack}
+        title="Piutang yang harus diterima"
+      />
+
+      {groups.length === 0 ? (
+        <SettlementEmptyState message="Tidak ada piutang dari peserta lain." />
+      ) : (
+        groups.map((group) => (
+          <SettlementGroupCard group={group} key={group.participantId} mode="receivable" />
+        ))
+      )}
+    </section>
+  );
+}
+
+function SettlementPanelHeader({
+  icon: Icon,
+  onBack,
+  title,
+}: {
+  icon: typeof LayoutDashboard;
+  onBack: () => void;
+  title: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid size-10 place-items-center rounded-md bg-accent text-accent-foreground">
+            <Icon size={20} strokeWidth={1.8} />
+          </div>
+          <h2 className="text-xl font-semibold">{title}</h2>
+        </div>
+        <button
+          className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px"
+          onClick={onBack}
+          type="button"
+        >
+          <ArrowRight className="rotate-180" size={17} strokeWidth={1.8} />
+          Kembali ke dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SettlementGroupCard({
+  group,
+  mode,
+  onPay,
+}: {
+  group: SettlementPaymentGroup;
+  mode: "payable" | "receivable";
+  onPay?: (item: SettlementPaymentItem, group: SettlementPaymentGroup) => void;
+}) {
+  return (
+    <article className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+      <div className="flex flex-col gap-3 border-b border-border pb-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            {mode === "payable" ? "Bayar ke" : "Dibayar oleh"}
+          </p>
+          <h3 className="mt-1 text-xl font-semibold">{group.participantName}</h3>
+          {group.bank ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {group.bank.bankName} {group.bank.accountNumber}
+            </p>
+          ) : null}
+        </div>
+        <div className="grid gap-2 text-left md:text-right">
+          <p className="text-sm text-muted-foreground">Total per peserta</p>
+          <p className="text-2xl font-semibold">{formatRupiah(group.totalAmount)}</p>
+          <p className="text-sm text-muted-foreground">
+            Belum bayar {formatRupiah(group.unpaidAmount)}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-lg border border-border">
+        <table className="w-full min-w-[720px] border-collapse bg-card text-sm">
+          <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3">Transaksi</th>
+              <th className="px-4 py-3 text-right">Nominal</th>
+              <th className="px-4 py-3">Status</th>
+              {mode === "payable" ? <th className="px-4 py-3 text-right">Aksi</th> : null}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {group.items.map((item) => (
+              <tr key={`${item.expenseId}-${item.debtorId}-${item.payerId}`}>
+                <td className="px-4 py-3 font-medium">{item.title}</td>
+                <td className="px-4 py-3 text-right font-semibold">
+                  {formatRupiah(item.amount)}
+                </td>
+                <td className="px-4 py-3">
+                  <SettlementStatusBadge status={item.status} />
+                </td>
+                {mode === "payable" ? (
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end">
+                      {item.status === "unpaid" ? (
+                        <button
+                          className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px"
+                          onClick={() => onPay?.(item, group)}
+                          type="button"
+                        >
+                          <WalletCards size={16} strokeWidth={1.8} />
+                          Bayar
+                        </button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Selesai</span>
+                      )}
+                    </div>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+
+function SettlementStatusBadge({ status }: { status: "paid" | "unpaid" }) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold",
+        status === "paid"
+          ? "bg-accent text-accent-foreground"
+          : "bg-muted text-muted-foreground",
+      ].join(" ")}
+    >
+      {status === "paid" ? "Sudah bayar" : "Belum bayar"}
+    </span>
+  );
+}
+
+function SettlementEmptyState({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center text-sm font-medium text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+function PaymentConfirmationDialog({
+  isSaving,
+  onCancel,
+  onConfirm,
+  payment,
+}: {
+  isSaving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  payment: PaymentTarget;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/35 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-card p-5 text-foreground shadow-[0_30px_90px_rgba(23,32,26,0.22)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Bayar</p>
+            <h2 className="mt-1 text-xl font-semibold">{payment.recipientName}</h2>
+          </div>
+          <div className="grid size-10 place-items-center rounded-md bg-accent text-accent-foreground">
+            <WalletCards size={20} strokeWidth={1.8} />
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 rounded-lg border border-border bg-muted p-4">
+          <PaymentInfoRow label="Transaksi" value={payment.title} />
+          <PaymentInfoRow label="Nominal" value={formatRupiah(payment.amount)} />
+          <PaymentInfoRow
+            label="Bank"
+            value={payment.bank?.bankName ?? "Rekening belum tersedia"}
+          />
+          <PaymentInfoRow
+            label="Nomor rekening"
+            value={payment.bank?.accountNumber ?? "-"}
+          />
+          <PaymentInfoRow
+            label="Nama pemilik rekening"
+            value={payment.bank?.accountHolderName ?? "-"}
+          />
+        </div>
+
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70"
+            disabled={isSaving}
+            onClick={onCancel}
+            type="button"
+          >
+            Batal
+          </button>
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+            disabled={isSaving}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isSaving ? (
+              <LoaderCircle className="animate-spin" size={16} strokeWidth={1.8} />
+            ) : (
+              <WalletCards size={16} strokeWidth={1.8} />
+            )}
+            {isSaving ? "Memproses..." : "Bayar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentInfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[160px_1fr] sm:items-center">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-semibold">{value}</span>
     </div>
   );
 }
@@ -2705,23 +3148,46 @@ function DeleteConfirmationDialog({
 function MetricCard({
   icon: Icon,
   label,
+  onClick,
   value,
 }: {
   icon: typeof LayoutDashboard;
   label: string;
+  onClick?: () => void;
   value: string;
 }) {
-  return (
-    <article className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="mt-2 text-2xl font-semibold tracking-[0]">{value}</p>
-        </div>
+  const content = (
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="mt-2 text-2xl font-semibold tracking-[0]">{value}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {onClick ? (
+          <ChevronRight className="text-muted-foreground" size={18} strokeWidth={1.8} />
+        ) : null}
         <div className="grid size-11 place-items-center rounded-md bg-accent text-accent-foreground">
           <Icon size={21} strokeWidth={1.8} />
         </div>
       </div>
+    </div>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        className="focus-ring rounded-lg border border-border bg-card p-5 text-left shadow-[0_20px_70px_rgba(23,32,26,0.07)] transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-card/80 active:translate-y-0"
+        onClick={onClick}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <article className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+      {content}
     </article>
   );
 }

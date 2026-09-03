@@ -75,6 +75,13 @@ export function deleteExpense(id) {
   });
 }
 
+export function recordSettlementPayment(payload) {
+  return requestJson("/api/settlement-payments", {
+    body: JSON.stringify(payload),
+    method: "POST",
+  });
+}
+
 async function requestJson(path, init = {}) {
   const response = await fetch(path, {
     ...init,

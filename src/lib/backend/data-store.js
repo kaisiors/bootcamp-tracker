@@ -31,6 +31,7 @@ export async function getAppStateForSession(session) {
         expenses: [],
         notifications: [],
         participants: [],
+        settlementPayments: [],
       };
     }
 
@@ -42,6 +43,11 @@ export async function getAppStateForSession(session) {
       (item) => item.id === session.participantId,
     );
     const visibleBootcampIds = new Set(participant?.bootcampIds ?? []);
+    const visibleExpenseIds = new Set(
+      state.expenses
+        .filter((expense) => visibleBootcampIds.has(expense.bootcampId))
+        .map((expense) => expense.id),
+    );
 
     return {
       bootcamps: state.bootcamps.filter((bootcamp) =>
@@ -55,6 +61,9 @@ export async function getAppStateForSession(session) {
       ),
       participants: state.participants.filter((item) =>
         item.bootcampIds.some((bootcampId) => visibleBootcampIds.has(bootcampId)),
+      ),
+      settlementPayments: state.settlementPayments.filter((payment) =>
+        visibleExpenseIds.has(payment.expenseId),
       ),
     };
   });
@@ -526,6 +535,9 @@ export async function updateExpense(id, payload, options = {}) {
       await client.query("DELETE FROM expense_splits WHERE expense_id = $1", [
         expense.id,
       ]);
+      await client.query("DELETE FROM settlement_payments WHERE expense_id = $1", [
+        expense.id,
+      ]);
 
       for (const split of expense.participants) {
         await client.query(
@@ -550,6 +562,71 @@ export async function deleteExpense(id) {
     await client.query("DELETE FROM expenses WHERE id = $1", [id]);
 
     return readState(client);
+  });
+}
+
+export async function recordSettlementPayment(payload, options = {}) {
+  return withDatabase(async (client) => {
+    const state = await readState(client);
+    const debtorId = options.participantId ?? requireString(payload.debtorId, "Peserta");
+    const expenseId = requireString(payload.expenseId, "Transaksi");
+    const payerId = requireString(payload.payerId, "Penerima pembayaran");
+    const expense = state.expenses.find((item) => item.id === expenseId);
+    const debtor = state.participants.find((item) => item.id === debtorId);
+    const payer = state.participants.find((item) => item.id === payerId);
+    const split = expense?.participants.find((item) => item.userId === debtorId);
+
+    if (
+      options.participantId &&
+      payload.debtorId &&
+      payload.debtorId !== options.participantId
+    ) {
+      throw createHttpError(
+        403,
+        "Peserta hanya bisa membayar tagihan peserta sendiri.",
+      );
+    }
+
+    if (!expense) {
+      throw createHttpError(404, "Transaksi tidak ditemukan.");
+    }
+
+    if (!debtor || !payer) {
+      throw createHttpError(404, "Peserta pembayaran tidak ditemukan.");
+    }
+
+    if (expense.payerId !== payerId || !split || debtorId === payerId) {
+      throw createHttpError(422, "Tagihan pembayaran tidak valid.");
+    }
+
+    const settlementPayment = {
+      debtorId,
+      expenseId,
+      id: createSettlementPaymentId(expenseId, debtorId, payerId),
+      paidAt: new Date().toISOString(),
+      payerId,
+    };
+
+    await client.query(
+      `INSERT INTO settlement_payments
+       (id, expense_id, debtor_id, payer_id, paid_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (expense_id, debtor_id, payer_id)
+       DO UPDATE SET paid_at = EXCLUDED.paid_at
+       RETURNING id`,
+      [
+        settlementPayment.id,
+        settlementPayment.expenseId,
+        settlementPayment.debtorId,
+        settlementPayment.payerId,
+        settlementPayment.paidAt,
+      ],
+    );
+
+    return {
+      settlementPayment,
+      state: await readState(client),
+    };
   });
 }
 
@@ -684,6 +761,15 @@ async function migrate(client) {
       is_read BOOLEAN NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS settlement_payments (
+      id TEXT PRIMARY KEY,
+      expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+      debtor_id TEXT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+      payer_id TEXT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+      paid_at TEXT NOT NULL,
+      UNIQUE (expense_id, debtor_id, payer_id)
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       token_hash TEXT NOT NULL UNIQUE,
@@ -725,6 +811,7 @@ async function migrate(client) {
 async function dropTables(client) {
   await client.query(`
     DROP TABLE IF EXISTS sessions CASCADE;
+    DROP TABLE IF EXISTS settlement_payments CASCADE;
     DROP TABLE IF EXISTS expense_splits CASCADE;
     DROP TABLE IF EXISTS expenses CASCADE;
     DROP TABLE IF EXISTS notifications CASCADE;
@@ -895,6 +982,11 @@ async function readState(client) {
      FROM notifications
      ORDER BY sent_at DESC`,
   );
+  const settlementPaymentRows = await client.query(
+    `SELECT id, expense_id, debtor_id, payer_id, paid_at
+     FROM settlement_payments
+     ORDER BY paid_at DESC, id ASC`,
+  );
 
   return {
     bootcamps: bootcampRows.rows.map((row) => ({
@@ -942,6 +1034,13 @@ async function readState(client) {
       id: row.id,
       name: row.name,
       phone: row.phone,
+    })),
+    settlementPayments: settlementPaymentRows.rows.map((row) => ({
+      debtorId: row.debtor_id,
+      expenseId: row.expense_id,
+      id: row.id,
+      paidAt: row.paid_at,
+      payerId: row.payer_id,
     })),
   };
 }
@@ -1018,6 +1117,10 @@ function normalizeDeadline(value) {
   }
 
   return value;
+}
+
+function createSettlementPaymentId(expenseId, debtorId, payerId) {
+  return `pay-${hashToken(`${expenseId}:${debtorId}:${payerId}`).slice(0, 16)}`;
 }
 
 function createHttpError(status, message) {

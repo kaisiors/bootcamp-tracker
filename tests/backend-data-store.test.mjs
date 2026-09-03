@@ -29,6 +29,7 @@ const {
   getAppStateForSession,
   getSessionByToken,
   hashPassword,
+  recordSettlementPayment,
   resetAppState,
   updateExpense,
 } = await import("../src/lib/backend/data-store.js");
@@ -73,6 +74,7 @@ describe("backend data store", () => {
         "notifications",
         "participants",
         "sessions",
+        "settlement_payments",
         "users",
       ],
     );
@@ -365,6 +367,43 @@ describe("backend data store", () => {
           { participantId: participantIds[1] },
         ),
       /dibuat sendiri/,
+    );
+  });
+
+  it("records participant settlement payments only for their own debts", async () => {
+    const result = await recordSettlementPayment(
+      {
+        debtorId: "bima",
+        expenseId: "exp-001",
+        payerId: "nala",
+      },
+      { participantId: "bima" },
+    );
+
+    assert.equal(result.settlementPayment.debtorId, "bima");
+    assert.equal(result.settlementPayment.expenseId, "exp-001");
+    assert.equal(result.settlementPayment.payerId, "nala");
+    assert.equal(typeof result.settlementPayment.paidAt, "string");
+    assert.ok(
+      result.state.settlementPayments.some(
+        (payment) =>
+          payment.debtorId === "bima" &&
+          payment.expenseId === "exp-001" &&
+          payment.payerId === "nala",
+      ),
+    );
+
+    await assert.rejects(
+      () =>
+        recordSettlementPayment(
+          {
+            debtorId: "bima",
+            expenseId: "exp-001",
+            payerId: "nala",
+          },
+          { participantId: "dewi" },
+        ),
+      /tagihan peserta sendiri/,
     );
   });
 
