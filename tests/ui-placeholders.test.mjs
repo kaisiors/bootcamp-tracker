@@ -194,6 +194,22 @@ describe("participant expense editing", () => {
   });
 });
 
+describe("participant dashboard overview", () => {
+  it("does not show new notification and participant access sections", () => {
+    for (const removedOverviewSection of [
+      "Notifikasi baru",
+      "Akses peserta",
+      "AuthPreviewPanel",
+    ]) {
+      assert.equal(
+        trackerApp.includes(removedOverviewSection),
+        false,
+        `${removedOverviewSection} should not be shown on the participant dashboard overview`,
+      );
+    }
+  });
+});
+
 describe("admin session controls", () => {
   it("shows an admin logout button backed by the logout API", () => {
     for (const logoutRequirement of [

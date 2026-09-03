@@ -14,7 +14,6 @@ import {
   LayoutDashboard,
   LoaderCircle,
   LockKeyhole,
-  LogIn,
   LogOut,
   Mail,
   Pencil,
@@ -619,7 +618,6 @@ export function BootcampTrackerApp() {
           {activeView === "overview" ? (
             <OverviewPanel
               activeBootcamp={participantBootcamp}
-              notifications={bootcampNotifications}
               participant={currentParticipant}
               settlementRows={settlementRows}
               summary={summary}
@@ -815,13 +813,11 @@ function Header({
 
 function OverviewPanel({
   activeBootcamp,
-  notifications,
   participant,
   settlementRows,
   summary,
 }: {
   activeBootcamp: BootcampRecord;
-  notifications: NotificationRecord[];
   participant: ParticipantRecord;
   settlementRows: Array<Record<string, string | number>>;
   summary: {
@@ -831,11 +827,9 @@ function OverviewPanel({
     netBalance: number;
   };
 }) {
-  const unreadNotifications = notifications.filter((item) => !item.isRead).length;
-
   return (
     <div className="grid gap-4">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-3">
         <MetricCard
           icon={CircleDollarSign}
           label="Total dibayar"
@@ -851,14 +845,9 @@ function OverviewPanel({
           label="Piutang saya"
           value={formatRupiah(summary.totalReceivable)}
         />
-        <MetricCard
-          icon={Bell}
-          label="Notifikasi baru"
-          value={`${unreadNotifications} pesan`}
-        />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+      <section className="grid gap-4">
         <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -900,66 +889,7 @@ function OverviewPanel({
             </table>
           </div>
         </div>
-
-        <AuthPreviewPanel bootcamp={activeBootcamp} participant={participant} />
       </section>
-    </div>
-  );
-}
-
-function AuthPreviewPanel({
-  bootcamp,
-  participant,
-}: {
-  bootcamp: BootcampRecord;
-  participant: ParticipantRecord;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
-      <div className="flex items-center gap-3">
-        <div className="grid size-10 place-items-center rounded-md bg-accent text-accent-foreground">
-          <LogIn size={20} strokeWidth={1.8} />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold">Akses peserta</h2>
-          <p className="text-sm text-muted-foreground">
-            Email terdaftar untuk bootcamp ini
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-3">
-        <label className="grid gap-2 text-sm font-medium">
-          Email peserta
-            <input
-              className="focus-ring rounded-md border border-border bg-card px-3 py-2 text-sm"
-              defaultValue={participant.email}
-              type="email"
-            />
-        </label>
-        <button
-          className="focus-ring flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px"
-          type="button"
-        >
-          Masuk sebagai peserta
-          <ArrowRight size={17} strokeWidth={1.8} />
-        </button>
-      </div>
-
-      <div className="mt-5 rounded-lg border border-border bg-accent p-4">
-        <div className="flex gap-3">
-          <AlertTriangle className="mt-0.5 text-accent-foreground" size={18} />
-          <div>
-            <p className="text-sm font-semibold text-accent-foreground">
-              Scope dashboard peserta
-            </p>
-            <p className="mt-1 text-sm leading-6 text-accent-foreground/80">
-              Data yang tampil dibatasi ke {bootcamp.name}, termasuk peserta,
-              transaksi, dan notifikasi.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
