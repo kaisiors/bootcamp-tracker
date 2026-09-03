@@ -312,6 +312,62 @@ describe("backend data store", () => {
     );
   });
 
+  it("lets participants update only expenses they created", async () => {
+    const state = await getAppState();
+    const bootcampId = "bc-next-08";
+    const participantIds = state.participants
+      .filter((participant) => participant.bootcampIds.includes(bootcampId))
+      .map((participant) => participant.id)
+      .slice(0, 2);
+    const created = await createExpense({
+      title: "Peserta edit awal",
+      amount: "80000",
+      bootcampId,
+      expenseDate: "2026-08-25",
+      payerId: participantIds[0],
+      participantIds,
+    });
+    const updated = await updateExpense(
+      created.expense.id,
+      {
+        title: "Peserta edit final",
+        amount: "60000",
+        bootcampId,
+        expenseDate: "2026-08-27",
+        payerId: participantIds[0],
+        participantIds: [participantIds[0]],
+      },
+      { participantId: participantIds[0] },
+    );
+
+    assert.equal(updated.expense.title, "Peserta edit final");
+    assert.equal(updated.expense.amount, 60000);
+    assert.equal(updated.expense.payerId, participantIds[0]);
+    assert.deepEqual(updated.expense.participants, [
+      {
+        shareAmount: 60000,
+        userId: participantIds[0],
+      },
+    ]);
+
+    await assert.rejects(
+      () =>
+        updateExpense(
+          created.expense.id,
+          {
+            title: "Peserta lain edit",
+            amount: "60000",
+            bootcampId,
+            expenseDate: "2026-08-27",
+            payerId: participantIds[1],
+            participantIds: [participantIds[1]],
+          },
+          { participantId: participantIds[1] },
+        ),
+      /dibuat sendiri/,
+    );
+  });
+
   it("deletes bootcamps with related expenses and enrollment links", async () => {
     const state = await getAppState();
     const targetBootcamp = state.bootcamps.find(

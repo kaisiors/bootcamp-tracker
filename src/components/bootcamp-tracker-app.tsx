@@ -117,6 +117,20 @@ export function BootcampTrackerApp() {
   const [expenseDate, setExpenseDate] = useState("");
   const [expenseFormMessage, setExpenseFormMessage] = useState("");
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [participantEditingExpenseId, setParticipantEditingExpenseId] =
+    useState<string | null>(null);
+  const [participantEditExpenseTitle, setParticipantEditExpenseTitle] =
+    useState("");
+  const [participantEditExpenseAmount, setParticipantEditExpenseAmount] =
+    useState("");
+  const [participantEditExpenseDate, setParticipantEditExpenseDate] =
+    useState("");
+  const [
+    participantEditExpenseParticipantIds,
+    setParticipantEditExpenseParticipantIds,
+  ] = useState<string[]>([]);
+  const [isSavingParticipantExpenseEdit, setIsSavingParticipantExpenseEdit] =
+    useState(false);
   const [isLoggingOutParticipant, setIsLoggingOutParticipant] = useState(false);
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
@@ -314,6 +328,15 @@ export function BootcampTrackerApp() {
     );
   }, [bootcampParticipants, checkedIds]);
 
+  const participantEditVisibleCheckedIds = useMemo(() => {
+    const visibleParticipantIds = new Set(
+      bootcampParticipants.map((participant) => participant.id),
+    );
+    return participantEditExpenseParticipantIds.filter((participantId) =>
+      visibleParticipantIds.has(participantId),
+    );
+  }, [bootcampParticipants, participantEditExpenseParticipantIds]);
+
   const splitPreview = useMemo(() => {
     const numericAmount = Number(amount);
 
@@ -323,10 +346,13 @@ export function BootcampTrackerApp() {
 
     return splitExpenseEvenly(numericAmount, visibleCheckedIds);
   }, [amount, visibleCheckedIds]);
-  const isDashboardBlockingProcess = isSavingExpense || isLoggingOutParticipant;
+  const isDashboardBlockingProcess =
+    isSavingExpense || isSavingParticipantExpenseEdit || isLoggingOutParticipant;
   const dashboardBlockingMessage = isLoggingOutParticipant
     ? "Memproses logout peserta..."
-    : "Menyimpan pengeluaran...";
+    : isSavingParticipantExpenseEdit
+      ? "Menyimpan perubahan pengeluaran..."
+      : "Menyimpan pengeluaran...";
 
   if (isLoadingDashboardData) {
     return (
@@ -359,6 +385,84 @@ export function BootcampTrackerApp() {
         ? selected.filter((id) => id !== participantId)
         : [...selected, participantId],
     );
+  }
+
+  function startParticipantExpenseEdit(expense: ExpenseRecord) {
+    if (expense.payerId !== currentParticipant.id) {
+      return;
+    }
+
+    setParticipantEditingExpenseId(expense.id);
+    setParticipantEditExpenseTitle(expense.title);
+    setParticipantEditExpenseAmount(String(expense.amount));
+    setParticipantEditExpenseDate(expense.expenseDate);
+    setParticipantEditExpenseParticipantIds(
+      expense.participants.map((participant) => participant.userId),
+    );
+    setExpenseFormMessage("");
+  }
+
+  function resetParticipantExpenseEditForm() {
+    setParticipantEditingExpenseId(null);
+    setParticipantEditExpenseTitle("");
+    setParticipantEditExpenseAmount("");
+    setParticipantEditExpenseDate("");
+    setParticipantEditExpenseParticipantIds([]);
+  }
+
+  function toggleParticipantExpenseEditParticipant(participantId: string) {
+    setParticipantEditExpenseParticipantIds((selected) =>
+      selected.includes(participantId)
+        ? selected.filter((id) => id !== participantId)
+        : [...selected, participantId],
+    );
+  }
+
+  async function handleSubmitParticipantExpenseEdit(
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (
+      !participantEditingExpenseId ||
+      isSavingParticipantExpenseEdit ||
+      !participantBootcamp
+    ) {
+      return;
+    }
+
+    const participantBootcampId = participantBootcamp.id;
+
+    if (participantEditVisibleCheckedIds.length === 0) {
+      setExpenseFormMessage("Pilih minimal satu peserta yang menanggung.");
+      return;
+    }
+
+    setIsSavingParticipantExpenseEdit(true);
+
+    try {
+      const result = await requestUpdateExpense(participantEditingExpenseId, {
+        amount: participantEditExpenseAmount,
+        bootcampId: participantBootcampId,
+        expenseDate: participantEditExpenseDate,
+        participantIds: participantEditVisibleCheckedIds,
+        payerId: currentParticipant.id,
+        title: participantEditExpenseTitle,
+      });
+
+      setManagedBootcamps(result.state.bootcamps);
+      setAllParticipants(result.state.participants);
+      setAllExpenses(result.state.expenses);
+      setAllNotifications(result.state.notifications);
+      resetParticipantExpenseEditForm();
+      setExpenseFormMessage("Perubahan pengeluaran tersimpan.");
+    } catch (error) {
+      setExpenseFormMessage(
+        error instanceof Error ? error.message : "Pengeluaran gagal diperbarui.",
+      );
+    } finally {
+      setIsSavingParticipantExpenseEdit(false);
+    }
   }
 
   async function handleParticipantLogout() {
@@ -524,10 +628,27 @@ export function BootcampTrackerApp() {
 
           {activeView === "transactions" ? (
             <TransactionsPanel
+              currentParticipant={currentParticipant}
               filteredExpenses={filteredExpenses}
+              isSavingParticipantExpenseEdit={isSavingParticipantExpenseEdit}
+              onCancelParticipantExpenseEdit={resetParticipantExpenseEditForm}
+              onStartParticipantExpenseEdit={startParticipantExpenseEdit}
+              onSubmitParticipantExpenseEdit={handleSubmitParticipantExpenseEdit}
+              participantEditExpenseAmount={participantEditExpenseAmount}
+              participantEditExpenseDate={participantEditExpenseDate}
+              participantEditExpenseParticipantIds={participantEditVisibleCheckedIds}
+              participantEditExpenseTitle={participantEditExpenseTitle}
+              participantEditingExpenseId={participantEditingExpenseId}
               participantsById={participantsById}
+              participants={bootcampParticipants}
               query={query}
               setQuery={setQuery}
+              setParticipantEditExpenseAmount={setParticipantEditExpenseAmount}
+              setParticipantEditExpenseDate={setParticipantEditExpenseDate}
+              setParticipantEditExpenseTitle={setParticipantEditExpenseTitle}
+              toggleParticipantExpenseEditParticipant={
+                toggleParticipantExpenseEditParticipant
+              }
             />
           ) : null}
 
@@ -844,15 +965,47 @@ function AuthPreviewPanel({
 }
 
 function TransactionsPanel({
+  currentParticipant,
   filteredExpenses,
+  isSavingParticipantExpenseEdit,
+  onCancelParticipantExpenseEdit,
+  onStartParticipantExpenseEdit,
+  onSubmitParticipantExpenseEdit,
+  participantEditExpenseAmount,
+  participantEditExpenseDate,
+  participantEditExpenseParticipantIds,
+  participantEditExpenseTitle,
+  participantEditingExpenseId,
   participantsById,
+  participants,
   query,
   setQuery,
+  setParticipantEditExpenseAmount,
+  setParticipantEditExpenseDate,
+  setParticipantEditExpenseTitle,
+  toggleParticipantExpenseEditParticipant,
 }: {
+  currentParticipant: ParticipantRecord;
   filteredExpenses: ExpenseRecord[];
+  isSavingParticipantExpenseEdit: boolean;
+  onCancelParticipantExpenseEdit: () => void;
+  onStartParticipantExpenseEdit: (expense: ExpenseRecord) => void;
+  onSubmitParticipantExpenseEdit: (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => void;
+  participantEditExpenseAmount: string;
+  participantEditExpenseDate: string;
+  participantEditExpenseParticipantIds: string[];
+  participantEditExpenseTitle: string;
+  participantEditingExpenseId: string | null;
   participantsById: Record<string, ParticipantRecord>;
+  participants: ParticipantRecord[];
   query: string;
   setQuery: (value: string) => void;
+  setParticipantEditExpenseAmount: (value: string) => void;
+  setParticipantEditExpenseDate: (value: string) => void;
+  setParticipantEditExpenseTitle: (value: string) => void;
+  toggleParticipantExpenseEditParticipant: (participantId: string) => void;
 }) {
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
@@ -874,8 +1027,133 @@ function TransactionsPanel({
         </label>
       </div>
 
+      {participantEditingExpenseId ? (
+        <form
+          className="mt-5 grid gap-4 rounded-lg border border-border bg-muted p-4 md:grid-cols-2 xl:grid-cols-[1fr_0.75fr_0.75fr]"
+          onSubmit={onSubmitParticipantExpenseEdit}
+        >
+          <div className="md:col-span-2 xl:col-span-3">
+            <h3 className="text-base font-semibold">Edit pengeluaran</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Peserta hanya bisa mengubah transaksi yang dibuat sendiri.
+            </p>
+          </div>
+          <label className="grid gap-2 text-sm font-medium">
+            Judul
+            <input
+              className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+              onChange={(event) =>
+                setParticipantEditExpenseTitle(event.target.value)
+              }
+              placeholder="Kopi dan snack review project"
+              required
+              value={participantEditExpenseTitle}
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-medium">
+            Nominal
+            <input
+              className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+              inputMode="numeric"
+              onChange={(event) =>
+                setParticipantEditExpenseAmount(event.target.value)
+              }
+              placeholder="100000"
+              required
+              value={participantEditExpenseAmount}
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-medium">
+            Tanggal
+            <input
+              className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+              onChange={(event) =>
+                setParticipantEditExpenseDate(event.target.value)
+              }
+              required
+              type="date"
+              value={participantEditExpenseDate}
+            />
+          </label>
+          <div className="grid gap-2 md:col-span-2 xl:col-span-3">
+            <p className="text-sm font-medium">Peserta yang menanggung</p>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {participants.map((participant) => {
+                const checked = participantEditExpenseParticipantIds.includes(
+                  participant.id,
+                );
+
+                return (
+                  <button
+                    className={[
+                      "focus-ring flex items-center justify-between rounded-md border bg-card px-3 py-2.5 text-left text-sm transition active:translate-y-px",
+                      checked
+                        ? "border-primary bg-accent"
+                        : "border-border hover:bg-card/70",
+                    ].join(" ")}
+                    key={participant.id}
+                    onClick={() =>
+                      toggleParticipantExpenseEditParticipant(participant.id)
+                    }
+                    type="button"
+                  >
+                    <span>
+                      <span className="block font-semibold">{participant.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {participant.id === currentParticipant.id
+                          ? "Pencatat transaksi"
+                          : participant.email}
+                      </span>
+                    </span>
+                    <span
+                      className={[
+                        "grid size-5 place-items-center rounded border",
+                        checked
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-card",
+                      ].join(" ")}
+                    >
+                      {checked ? <Check size={14} strokeWidth={2.2} /> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 md:col-span-2 md:flex-row md:justify-end xl:col-span-3">
+            <button
+              className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-card/70 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
+              disabled={isSavingParticipantExpenseEdit}
+              onClick={onCancelParticipantExpenseEdit}
+              type="button"
+            >
+              Batal edit pengeluaran
+            </button>
+            <button
+              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+              disabled={
+                isSavingParticipantExpenseEdit ||
+                participantEditExpenseParticipantIds.length === 0
+              }
+              type="submit"
+            >
+              {isSavingParticipantExpenseEdit ? (
+                <LoaderCircle
+                  className="animate-spin"
+                  size={17}
+                  strokeWidth={1.8}
+                />
+              ) : (
+                <Pencil size={17} strokeWidth={1.8} />
+              )}
+              {isSavingParticipantExpenseEdit ? "Menyimpan..." : "Simpan perubahan"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
       <div className="mt-5 overflow-hidden rounded-lg border border-border">
-        <table className="w-full min-w-[760px] border-collapse bg-card text-sm">
+        <table className="w-full min-w-[840px] border-collapse bg-card text-sm">
           <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Judul</th>
@@ -883,6 +1161,7 @@ function TransactionsPanel({
               <th className="px-4 py-3">Pembayar</th>
               <th className="px-4 py-3">Peserta dipilih</th>
               <th className="px-4 py-3 text-right">Nominal</th>
+              <th className="px-4 py-3 text-right">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -900,6 +1179,21 @@ function TransactionsPanel({
                 </td>
                 <td className="px-4 py-3 text-right font-semibold">
                   {formatRupiah(expense.amount)}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end">
+                    {expense.payerId === currentParticipant.id ? (
+                      <button
+                        className="focus-ring inline-flex size-9 items-center justify-center rounded-md border border-border bg-card text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-card disabled:active:translate-y-0"
+                        disabled={isSavingParticipantExpenseEdit}
+                        onClick={() => onStartParticipantExpenseEdit(expense)}
+                        title="Edit pengeluaran"
+                        type="button"
+                      >
+                        <Pencil size={16} strokeWidth={1.8} />
+                      </button>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ))}

@@ -441,24 +441,37 @@ export async function createExpense(payload, options = {}) {
   });
 }
 
-export async function updateExpense(id, payload) {
+export async function updateExpense(id, payload, options = {}) {
   return withDatabase(async (client) => {
     const state = await readState(client);
     const existingExpense = state.expenses.find((item) => item.id === id);
-    const bootcamp = state.bootcamps.find((item) => item.id === payload.bootcampId);
-    const payer = state.participants.find((item) => item.id === payload.payerId);
+    const nextBootcampId = options.participantId
+      ? existingExpense?.bootcampId
+      : payload.bootcampId;
+    const nextPayerId = options.participantId
+      ? options.participantId
+      : payload.payerId;
+    const bootcamp = state.bootcamps.find((item) => item.id === nextBootcampId);
+    const payer = state.participants.find((item) => item.id === nextPayerId);
     const participantIds = Array.isArray(payload.participantIds)
       ? [...new Set(payload.participantIds)].filter(Boolean)
       : [];
     const bootcampParticipantIds = new Set(
       state.participants
-        .filter((participant) => participant.bootcampIds.includes(payload.bootcampId))
+        .filter((participant) => participant.bootcampIds.includes(nextBootcampId))
         .map((participant) => participant.id),
     );
     const amount = Number(payload.amount);
 
     if (!existingExpense) {
       throw createHttpError(404, "Transaksi tidak ditemukan.");
+    }
+
+    if (options.participantId && existingExpense.payerId !== options.participantId) {
+      throw createHttpError(
+        403,
+        "Peserta hanya bisa mengedit transaksi yang dibuat sendiri.",
+      );
     }
 
     if (!bootcamp) {

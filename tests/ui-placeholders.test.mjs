@@ -172,6 +172,28 @@ describe("admin expense editing", () => {
   });
 });
 
+describe("participant expense editing", () => {
+  it("shows edit controls only for transactions created by the active participant", () => {
+    for (const participantEditRequirement of [
+      "participantEditingExpenseId",
+      "startParticipantExpenseEdit",
+      "handleSubmitParticipantExpenseEdit",
+      "resetParticipantExpenseEditForm",
+      "isSavingParticipantExpenseEdit",
+      "Menyimpan perubahan pengeluaran...",
+      "Edit pengeluaran",
+      "Batal edit pengeluaran",
+      "expense.payerId === currentParticipant.id",
+    ]) {
+      assert.equal(
+        trackerApp.includes(participantEditRequirement),
+        true,
+        `${participantEditRequirement} should be represented in the participant expense edit flow`,
+      );
+    }
+  });
+});
+
 describe("admin session controls", () => {
   it("shows an admin logout button backed by the logout API", () => {
     for (const logoutRequirement of [

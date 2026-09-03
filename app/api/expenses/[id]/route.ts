@@ -1,6 +1,8 @@
 import {
   deleteExpense,
+  getSessionFromCookieHeader,
   requireAdminSession,
+  requireParticipantSession,
   toErrorResponse,
   updateExpense,
 } from "@/src/lib/backend/data-store.js";
@@ -27,11 +29,21 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAdminSession(request);
-
+    const session = await getSessionFromCookieHeader(request.headers.get("cookie"));
     const { id } = await params;
+    const payload = await request.json();
 
-    return Response.json(await updateExpense(id, await request.json()));
+    if (session?.role === "ADMIN") {
+      return Response.json(await updateExpense(id, payload));
+    }
+
+    const participantSession = await requireParticipantSession(request);
+
+    return Response.json(
+      await updateExpense(id, payload, {
+        participantId: participantSession.participantId,
+      }),
+    );
   } catch (error) {
     return toErrorResponse(error);
   }
