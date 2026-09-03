@@ -568,63 +568,92 @@ export async function deleteExpense(id) {
 export async function recordSettlementPayment(payload, options = {}) {
   return withDatabase(async (client) => {
     const state = await readState(client);
-    const debtorId = options.participantId ?? requireString(payload.debtorId, "Peserta");
-    const expenseId = requireString(payload.expenseId, "Transaksi");
-    const payerId = requireString(payload.payerId, "Penerima pembayaran");
-    const expense = state.expenses.find((item) => item.id === expenseId);
-    const debtor = state.participants.find((item) => item.id === debtorId);
-    const payer = state.participants.find((item) => item.id === payerId);
-    const split = expense?.participants.find((item) => item.userId === debtorId);
+    const paymentPayloads = Array.isArray(payload.payments)
+      ? payload.payments
+      : [payload];
 
-    if (
-      options.participantId &&
-      payload.debtorId &&
-      payload.debtorId !== options.participantId
-    ) {
-      throw createHttpError(
-        403,
-        "Peserta hanya bisa membayar tagihan peserta sendiri.",
-      );
+    if (paymentPayloads.length === 0) {
+      throw createHttpError(422, "Pilih minimal satu tagihan.");
     }
 
-    if (!expense) {
-      throw createHttpError(404, "Transaksi tidak ditemukan.");
+    const paidAt = new Date().toISOString();
+    const settlementPayments = [];
+
+    await client.query("BEGIN");
+
+    try {
+      for (const paymentPayload of paymentPayloads) {
+        const debtorId =
+          options.participantId ?? requireString(paymentPayload.debtorId, "Peserta");
+        const expenseId = requireString(paymentPayload.expenseId, "Transaksi");
+        const payerId = requireString(
+          paymentPayload.payerId,
+          "Penerima pembayaran",
+        );
+        const expense = state.expenses.find((item) => item.id === expenseId);
+        const debtor = state.participants.find((item) => item.id === debtorId);
+        const payer = state.participants.find((item) => item.id === payerId);
+        const split = expense?.participants.find((item) => item.userId === debtorId);
+
+        if (
+          options.participantId &&
+          paymentPayload.debtorId &&
+          paymentPayload.debtorId !== options.participantId
+        ) {
+          throw createHttpError(
+            403,
+            "Peserta hanya bisa membayar tagihan peserta sendiri.",
+          );
+        }
+
+        if (!expense) {
+          throw createHttpError(404, "Transaksi tidak ditemukan.");
+        }
+
+        if (!debtor || !payer) {
+          throw createHttpError(404, "Peserta pembayaran tidak ditemukan.");
+        }
+
+        if (expense.payerId !== payerId || !split || debtorId === payerId) {
+          throw createHttpError(422, "Tagihan pembayaran tidak valid.");
+        }
+
+        const settlementPayment = {
+          debtorId,
+          expenseId,
+          id: createSettlementPaymentId(expenseId, debtorId, payerId),
+          paidAt,
+          payerId,
+        };
+
+        await client.query(
+          `INSERT INTO settlement_payments
+           (id, expense_id, debtor_id, payer_id, paid_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (expense_id, debtor_id, payer_id)
+           DO UPDATE SET paid_at = EXCLUDED.paid_at
+           RETURNING id`,
+          [
+            settlementPayment.id,
+            settlementPayment.expenseId,
+            settlementPayment.debtorId,
+            settlementPayment.payerId,
+            settlementPayment.paidAt,
+          ],
+        );
+
+        settlementPayments.push(settlementPayment);
+      }
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     }
-
-    if (!debtor || !payer) {
-      throw createHttpError(404, "Peserta pembayaran tidak ditemukan.");
-    }
-
-    if (expense.payerId !== payerId || !split || debtorId === payerId) {
-      throw createHttpError(422, "Tagihan pembayaran tidak valid.");
-    }
-
-    const settlementPayment = {
-      debtorId,
-      expenseId,
-      id: createSettlementPaymentId(expenseId, debtorId, payerId),
-      paidAt: new Date().toISOString(),
-      payerId,
-    };
-
-    await client.query(
-      `INSERT INTO settlement_payments
-       (id, expense_id, debtor_id, payer_id, paid_at)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (expense_id, debtor_id, payer_id)
-       DO UPDATE SET paid_at = EXCLUDED.paid_at
-       RETURNING id`,
-      [
-        settlementPayment.id,
-        settlementPayment.expenseId,
-        settlementPayment.debtorId,
-        settlementPayment.payerId,
-        settlementPayment.paidAt,
-      ],
-    );
 
     return {
-      settlementPayment,
+      settlementPayment: settlementPayments[0] ?? null,
+      settlementPayments,
       state: await readState(client),
     };
   });

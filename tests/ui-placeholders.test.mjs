@@ -236,6 +236,28 @@ describe("participant settlement views", () => {
       );
     }
   });
+
+  it("uses one payment action per payable participant group", () => {
+    for (const groupPaymentRequirement of [
+      "onPayGroup",
+      "startSettlementPayment(group",
+      "paymentTarget.items",
+      "Total tagihan",
+      "payments:",
+    ]) {
+      assert.equal(
+        trackerApp.includes(groupPaymentRequirement),
+        true,
+        `${groupPaymentRequirement} should be represented in grouped payment flow`,
+      );
+    }
+
+    assert.equal(
+      trackerApp.includes("onPay?.(item, group)"),
+      false,
+      "payable rows should not render a per-transaction payment action",
+    );
+  });
 });
 
 describe("admin session controls", () => {

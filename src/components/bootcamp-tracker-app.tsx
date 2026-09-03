@@ -104,9 +104,11 @@ type SettlementPaymentGroup = {
   totalAmount: number;
   unpaidAmount: number;
 };
-type PaymentTarget = SettlementPaymentItem & {
+type PaymentTarget = {
   bank: ParticipantRecord["bank"] | null;
+  items: SettlementPaymentItem[];
   recipientName: string;
+  totalAmount: number;
 };
 type AdminView =
   | "summary"
@@ -551,18 +553,18 @@ export function BootcampTrackerApp() {
     }
   }
 
-  function startSettlementPayment(
-    item: SettlementPaymentItem,
-    group: SettlementPaymentGroup,
-  ) {
-    if (item.status === "paid") {
+  function startSettlementPayment(group: SettlementPaymentGroup) {
+    const unpaidItems = group.items.filter((item) => item.status === "unpaid");
+
+    if (unpaidItems.length === 0) {
       return;
     }
 
     setPaymentTarget({
-      ...item,
       bank: group.bank,
+      items: unpaidItems,
       recipientName: group.participantName,
+      totalAmount: group.unpaidAmount,
     });
     setExpenseFormMessage("");
   }
@@ -576,9 +578,11 @@ export function BootcampTrackerApp() {
 
     try {
       const result = await requestRecordSettlementPayment({
-        debtorId: currentParticipant.id,
-        expenseId: paymentTarget.expenseId,
-        payerId: paymentTarget.payerId,
+        payments: paymentTarget.items.map((item) => ({
+          debtorId: currentParticipant.id,
+          expenseId: item.expenseId,
+          payerId: item.payerId,
+        })),
       });
 
       setManagedBootcamps(result.state.bootcamps);
@@ -800,7 +804,7 @@ export function BootcampTrackerApp() {
             <PayableSettlementsPanel
               groups={payableGroups}
               onBack={() => setActiveView("overview")}
-              onPay={startSettlementPayment}
+              onPayGroup={startSettlementPayment}
             />
           ) : null}
 
@@ -1070,11 +1074,11 @@ function OverviewPanel({
 function PayableSettlementsPanel({
   groups,
   onBack,
-  onPay,
+  onPayGroup,
 }: {
   groups: SettlementPaymentGroup[];
   onBack: () => void;
-  onPay: (item: SettlementPaymentItem, group: SettlementPaymentGroup) => void;
+  onPayGroup: (group: SettlementPaymentGroup) => void;
 }) {
   return (
     <section className="grid gap-4">
@@ -1092,7 +1096,7 @@ function PayableSettlementsPanel({
             group={group}
             key={group.participantId}
             mode="payable"
-            onPay={onPay}
+            onPayGroup={onPayGroup}
           />
         ))
       )}
@@ -1160,11 +1164,11 @@ function SettlementPanelHeader({
 function SettlementGroupCard({
   group,
   mode,
-  onPay,
+  onPayGroup,
 }: {
   group: SettlementPaymentGroup;
   mode: "payable" | "receivable";
-  onPay?: (item: SettlementPaymentItem, group: SettlementPaymentGroup) => void;
+  onPayGroup?: (group: SettlementPaymentGroup) => void;
 }) {
   return (
     <article className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
@@ -1180,12 +1184,28 @@ function SettlementGroupCard({
             </p>
           ) : null}
         </div>
-        <div className="grid gap-2 text-left md:text-right">
+        <div className="grid gap-3 text-left md:justify-items-end md:text-right">
           <p className="text-sm text-muted-foreground">Total per peserta</p>
           <p className="text-2xl font-semibold">{formatRupiah(group.totalAmount)}</p>
           <p className="text-sm text-muted-foreground">
             Belum bayar {formatRupiah(group.unpaidAmount)}
           </p>
+          {mode === "payable" ? (
+            group.unpaidAmount > 0 ? (
+              <button
+                className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px"
+                onClick={() => onPayGroup?.(group)}
+                type="button"
+              >
+                <WalletCards size={16} strokeWidth={1.8} />
+                Bayar
+              </button>
+            ) : (
+              <span className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-semibold text-accent-foreground">
+                Semua sudah bayar
+              </span>
+            )
+          ) : null}
         </div>
       </div>
 
@@ -1196,7 +1216,6 @@ function SettlementGroupCard({
               <th className="px-4 py-3">Transaksi</th>
               <th className="px-4 py-3 text-right">Nominal</th>
               <th className="px-4 py-3">Status</th>
-              {mode === "payable" ? <th className="px-4 py-3 text-right">Aksi</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -1209,24 +1228,6 @@ function SettlementGroupCard({
                 <td className="px-4 py-3">
                   <SettlementStatusBadge status={item.status} />
                 </td>
-                {mode === "payable" ? (
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end">
-                      {item.status === "unpaid" ? (
-                        <button
-                          className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px"
-                          onClick={() => onPay?.(item, group)}
-                          type="button"
-                        >
-                          <WalletCards size={16} strokeWidth={1.8} />
-                          Bayar
-                        </button>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">Selesai</span>
-                      )}
-                    </div>
-                  </td>
-                ) : null}
               </tr>
             ))}
           </tbody>
@@ -1284,8 +1285,11 @@ function PaymentConfirmationDialog({
         </div>
 
         <div className="mt-5 grid gap-3 rounded-lg border border-border bg-muted p-4">
-          <PaymentInfoRow label="Transaksi" value={payment.title} />
-          <PaymentInfoRow label="Nominal" value={formatRupiah(payment.amount)} />
+          <PaymentInfoRow label="Total tagihan" value={formatRupiah(payment.totalAmount)} />
+          <PaymentInfoRow
+            label="Jumlah transaksi"
+            value={`${payment.items.length} transaksi`}
+          />
           <PaymentInfoRow
             label="Bank"
             value={payment.bank?.bankName ?? "Rekening belum tersedia"}
@@ -1298,6 +1302,27 @@ function PaymentConfirmationDialog({
             label="Nama pemilik rekening"
             value={payment.bank?.accountHolderName ?? "-"}
           />
+        </div>
+
+        <div className="mt-4 max-h-52 overflow-auto rounded-lg border border-border">
+          <table className="w-full border-collapse bg-card text-sm">
+            <thead className="sticky top-0 bg-muted text-left text-xs font-semibold text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Transaksi</th>
+                <th className="px-3 py-2 text-right">Nominal</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {payment.items.map((item) => (
+                <tr key={`${item.expenseId}-${item.debtorId}-${item.payerId}`}>
+                  <td className="px-3 py-2 font-medium">{item.title}</td>
+                  <td className="px-3 py-2 text-right font-semibold">
+                    {formatRupiah(item.amount)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">

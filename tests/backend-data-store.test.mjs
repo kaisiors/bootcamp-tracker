@@ -373,17 +373,41 @@ describe("backend data store", () => {
   it("records participant settlement payments only for their own debts", async () => {
     const result = await recordSettlementPayment(
       {
-        debtorId: "bima",
-        expenseId: "exp-001",
-        payerId: "nala",
+        payments: [
+          {
+            debtorId: "bima",
+            expenseId: "exp-001",
+            payerId: "nala",
+          },
+          {
+            debtorId: "bima",
+            expenseId: "exp-004",
+            payerId: "sari",
+          },
+        ],
       },
       { participantId: "bima" },
     );
 
-    assert.equal(result.settlementPayment.debtorId, "bima");
-    assert.equal(result.settlementPayment.expenseId, "exp-001");
-    assert.equal(result.settlementPayment.payerId, "nala");
-    assert.equal(typeof result.settlementPayment.paidAt, "string");
+    assert.deepEqual(
+      result.settlementPayments.map((payment) => ({
+        debtorId: payment.debtorId,
+        expenseId: payment.expenseId,
+        payerId: payment.payerId,
+      })),
+      [
+        {
+          debtorId: "bima",
+          expenseId: "exp-001",
+          payerId: "nala",
+        },
+        {
+          debtorId: "bima",
+          expenseId: "exp-004",
+          payerId: "sari",
+        },
+      ],
+    );
     assert.ok(
       result.state.settlementPayments.some(
         (payment) =>
@@ -392,14 +416,26 @@ describe("backend data store", () => {
           payment.payerId === "nala",
       ),
     );
+    assert.ok(
+      result.state.settlementPayments.some(
+        (payment) =>
+          payment.debtorId === "bima" &&
+          payment.expenseId === "exp-004" &&
+          payment.payerId === "sari",
+      ),
+    );
 
     await assert.rejects(
       () =>
         recordSettlementPayment(
           {
-            debtorId: "bima",
-            expenseId: "exp-001",
-            payerId: "nala",
+            payments: [
+              {
+                debtorId: "bima",
+                expenseId: "exp-001",
+                payerId: "nala",
+              },
+            ],
           },
           { participantId: "dewi" },
         ),
