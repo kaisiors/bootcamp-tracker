@@ -434,4 +434,21 @@ describe("expense participant selection", () => {
       );
     }
   });
+
+  it("lets selected expense participant amounts be edited and selected all at once", () => {
+    for (const customSplitRequirement of [
+      "setExpenseShareValues",
+      "setAllExpenseParticipants",
+      "Pilih semua",
+      "participantShares:",
+      "Total belum sesuai",
+      "onShareAmountChange",
+    ]) {
+      assert.equal(
+        trackerApp.includes(customSplitRequirement),
+        true,
+        `${customSplitRequirement} should be represented in the custom split flow`,
+      );
+    }
+  });
 });

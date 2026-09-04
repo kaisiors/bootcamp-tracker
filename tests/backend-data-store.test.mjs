@@ -267,6 +267,45 @@ describe("backend data store", () => {
     );
   });
 
+  it("creates expenses with editable split amounts per selected participant", async () => {
+    const state = await getAppState();
+    const bootcampId = "bc-next-08";
+    const participantIds = state.participants
+      .filter((participant) => participant.bootcampIds.includes(bootcampId))
+      .map((participant) => participant.id)
+      .slice(0, 3);
+    const expenseResult = await createExpense({
+      title: "Backend custom split",
+      amount: "150000",
+      bootcampId,
+      expenseDate: "2026-08-25",
+      payerId: participantIds[0],
+      participantIds,
+      participantShares: [
+        { userId: participantIds[0], shareAmount: "70000" },
+        { userId: participantIds[1], shareAmount: "50000" },
+        { userId: participantIds[2], shareAmount: "30000" },
+      ],
+    });
+
+    assert.deepEqual(expenseResult.expense.participants, [
+      { userId: participantIds[0], shareAmount: 70000 },
+      { userId: participantIds[1], shareAmount: 50000 },
+      { userId: participantIds[2], shareAmount: 30000 },
+    ]);
+    assert.ok(
+      expenseResult.state.expenses.some(
+        (expense) =>
+          expense.id === expenseResult.expense.id &&
+          expense.participants.some(
+            (participant) =>
+              participant.userId === participantIds[1] &&
+              participant.shareAmount === 50000,
+          ),
+      ),
+    );
+  });
+
   it("updates expense details and recalculates splits", async () => {
     const state = await getAppState();
     const bootcampId = "bc-next-08";

@@ -35,8 +35,67 @@ export function createExpenseFromDraft(draft, existingExpenses = []) {
     bootcampId: draft.bootcampId,
     expenseDate: draft.expenseDate,
     payerId: draft.payerId,
-    participants: splitExpenseEvenly(amount, participantIds),
+    participants: resolveExpenseParticipantShares(
+      amount,
+      participantIds,
+      draft.participantShares,
+    ),
   };
+}
+
+export function resolveExpenseParticipantShares(
+  amount,
+  participantIds,
+  participantShares,
+) {
+  if (!Array.isArray(participantShares)) {
+    return splitExpenseEvenly(amount, participantIds);
+  }
+
+  const selectedParticipantIds = new Set(participantIds);
+  const sharesByParticipant = new Map();
+
+  for (const share of participantShares) {
+    const userId = share?.userId;
+    const shareAmount = Number(share?.shareAmount);
+
+    if (
+      !userId ||
+      !selectedParticipantIds.has(userId) ||
+      sharesByParticipant.has(userId)
+    ) {
+      throw new Error("Nominal peserta harus sesuai peserta yang dipilih.");
+    }
+
+    if (!Number.isInteger(shareAmount) || shareAmount <= 0) {
+      throw new Error("Nominal setiap peserta harus lebih dari 0.");
+    }
+
+    sharesByParticipant.set(userId, shareAmount);
+  }
+
+  const shares = participantIds.map((userId) => {
+    const shareAmount = sharesByParticipant.get(userId);
+
+    if (!Number.isInteger(shareAmount)) {
+      throw new Error("Nominal setiap peserta yang dipilih wajib diisi.");
+    }
+
+    return { userId, shareAmount };
+  });
+
+  const totalShare = shares.reduce(
+    (total, share) => total + share.shareAmount,
+    0,
+  );
+
+  if (totalShare !== amount) {
+    throw new Error(
+      "Total pembayaran peserta harus sama dengan nominal pengeluaran.",
+    );
+  }
+
+  return shares;
 }
 
 export function mergeExpenses(baseExpenses, storedExpenses) {

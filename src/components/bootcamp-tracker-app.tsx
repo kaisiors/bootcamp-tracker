@@ -124,6 +124,7 @@ type DeleteConfirmation = {
   itemName: string;
   confirmLabel: string;
 };
+type ExpenseShareValues = Record<string, string>;
 
 const navItems = [
   { id: "overview", label: "Dashboard", icon: LayoutDashboard },
@@ -140,6 +141,32 @@ const adminNavItems = [
   { id: "bankAccounts", label: "Rekening", icon: CreditCard },
   { id: "expenses", label: "Transaksi", icon: ReceiptText },
 ] satisfies Array<{ id: AdminView; label: string; icon: typeof LayoutDashboard }>;
+
+function createEvenExpenseShareValues(
+  amount: string,
+  participantIds: string[],
+): ExpenseShareValues {
+  const numericAmount = Number(amount);
+
+  if (
+    !Number.isInteger(numericAmount) ||
+    numericAmount <= 0 ||
+    participantIds.length === 0
+  ) {
+    return Object.fromEntries(participantIds.map((id) => [id, ""]));
+  }
+
+  return Object.fromEntries(
+    splitExpenseEvenly(numericAmount, participantIds).map((share) => [
+      share.userId,
+      String(share.shareAmount),
+    ]),
+  );
+}
+
+function sanitizeAmountInput(value: string) {
+  return value.replace(/\D/g, "");
+}
 
 export function BootcampTrackerApp() {
   const router = useRouter();
@@ -179,6 +206,8 @@ export function BootcampTrackerApp() {
   const [isLoggingOutParticipant, setIsLoggingOutParticipant] = useState(false);
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
+  const [expenseShareValues, setExpenseShareValues] =
+    useState<ExpenseShareValues>({});
 
   const participantsById = useMemo(
     () =>
@@ -420,14 +449,21 @@ export function BootcampTrackerApp() {
   }, [bootcampParticipants, participantEditExpenseParticipantIds]);
 
   const splitPreview = useMemo(() => {
-    const numericAmount = Number(amount);
-
-    if (!Number.isInteger(numericAmount) || numericAmount <= 0) {
-      return [];
-    }
-
-    return splitExpenseEvenly(numericAmount, visibleCheckedIds);
-  }, [amount, visibleCheckedIds]);
+    return visibleCheckedIds.map((userId) => ({
+      userId,
+      shareAmount: Number(expenseShareValues[userId] ?? 0),
+    }));
+  }, [expenseShareValues, visibleCheckedIds]);
+  const splitTotal = splitPreview.reduce(
+    (total, share) => total + share.shareAmount,
+    0,
+  );
+  const numericExpenseAmount = Number(amount);
+  const isSplitTotalValid =
+    Number.isInteger(numericExpenseAmount) &&
+    numericExpenseAmount > 0 &&
+    splitTotal === numericExpenseAmount &&
+    splitPreview.every((share) => Number.isInteger(share.shareAmount) && share.shareAmount > 0);
   const isDashboardBlockingProcess =
     isSavingExpense ||
     isSavingParticipantExpenseEdit ||
@@ -467,11 +503,48 @@ export function BootcampTrackerApp() {
   }
 
   function toggleParticipant(participantId: string) {
-    setCheckedIds((selected) =>
-      selected.includes(participantId)
-        ? selected.filter((id) => id !== participantId)
-        : [...selected, participantId],
+    const nextCheckedIds = checkedIds.includes(participantId)
+      ? checkedIds.filter((id) => id !== participantId)
+      : [...checkedIds, participantId];
+    const visibleParticipantIds = new Set(
+      bootcampParticipants.map((participant) => participant.id),
     );
+    const nextVisibleCheckedIds = nextCheckedIds.filter((id) =>
+      visibleParticipantIds.has(id),
+    );
+
+    setCheckedIds(nextCheckedIds);
+    setExpenseShareValues(
+      createEvenExpenseShareValues(amount, nextVisibleCheckedIds),
+    );
+  }
+
+  function setAllExpenseParticipants() {
+    const participantIds = bootcampParticipants.map((participant) => participant.id);
+
+    setCheckedIds(participantIds);
+    setExpenseShareValues(createEvenExpenseShareValues(amount, participantIds));
+  }
+
+  function clearExpenseParticipants() {
+    setCheckedIds([]);
+    setExpenseShareValues({});
+  }
+
+  function handleExpenseAmountChange(value: string) {
+    const nextAmount = sanitizeAmountInput(value);
+
+    setAmount(nextAmount);
+    setExpenseShareValues(
+      createEvenExpenseShareValues(nextAmount, visibleCheckedIds),
+    );
+  }
+
+  function handleExpenseShareAmountChange(participantId: string, value: string) {
+    setExpenseShareValues((current) => ({
+      ...current,
+      [participantId]: sanitizeAmountInput(value),
+    }));
   }
 
   function startParticipantExpenseEdit(expense: ExpenseRecord) {
@@ -629,6 +702,27 @@ export function BootcampTrackerApp() {
       return;
     }
 
+    if (!Number.isInteger(numericExpenseAmount) || numericExpenseAmount <= 0) {
+      setExpenseFormMessage("Nominal pengeluaran harus lebih dari 0.");
+      return;
+    }
+
+    if (
+      splitPreview.some(
+        (share) => !Number.isInteger(share.shareAmount) || share.shareAmount <= 0,
+      )
+    ) {
+      setExpenseFormMessage("Nominal setiap peserta harus lebih dari 0.");
+      return;
+    }
+
+    if (!isSplitTotalValid) {
+      setExpenseFormMessage(
+        "Total belum sesuai. Total pembayaran peserta harus sama dengan nominal pengeluaran.",
+      );
+      return;
+    }
+
     if (!currentParticipant || !participantBootcamp) {
       setExpenseFormMessage("Data peserta atau bootcamp belum tersedia.");
       return;
@@ -644,6 +738,7 @@ export function BootcampTrackerApp() {
         expenseDate,
         payerId: currentParticipant.id,
         participantIds: visibleCheckedIds,
+        participantShares: splitPreview,
       });
 
       setManagedBootcamps(result.state.bootcamps);
@@ -655,6 +750,7 @@ export function BootcampTrackerApp() {
       setAmount("");
       setExpenseDate("");
       setCheckedIds([]);
+      setExpenseShareValues({});
       setExpenseFormMessage("Pengeluaran tersimpan dan langsung masuk rekap.");
       setActiveView("transactions");
     } catch (error) {
@@ -819,16 +915,22 @@ export function BootcampTrackerApp() {
             <AddExpensePanel
               amount={amount}
               checkedIds={visibleCheckedIds}
+              clearExpenseParticipants={clearExpenseParticipants}
               expenseDate={expenseDate}
               activeParticipant={currentParticipant}
               participantsById={participantsById}
               participants={bootcampParticipants}
               expenseFormMessage={expenseFormMessage}
+              isSplitTotalValid={isSplitTotalValid}
               isSavingExpense={isSavingExpense}
+              onSelectAllParticipants={setAllExpenseParticipants}
               onSaveExpense={handleSaveExpense}
-              setAmount={setAmount}
+              onShareAmountChange={handleExpenseShareAmountChange}
+              setAmount={handleExpenseAmountChange}
               setExpenseDate={setExpenseDate}
               setTitle={setTitle}
+              shareValues={expenseShareValues}
+              splitTotal={splitTotal}
               splitPreview={splitPreview}
               title={title}
               toggleParticipant={toggleParticipant}
@@ -1605,36 +1707,51 @@ function TransactionsPanel({
 function AddExpensePanel({
   amount,
   checkedIds,
+  clearExpenseParticipants,
   expenseDate,
   activeParticipant,
   expenseFormMessage,
+  isSplitTotalValid,
   isSavingExpense,
+  onSelectAllParticipants,
   onSaveExpense,
+  onShareAmountChange,
   participantsById,
   participants,
   setAmount,
   setExpenseDate,
   setTitle,
+  shareValues,
+  splitTotal,
   splitPreview,
   title,
   toggleParticipant,
 }: {
   amount: string;
   checkedIds: string[];
+  clearExpenseParticipants: () => void;
   expenseDate: string;
   activeParticipant: ParticipantRecord;
   expenseFormMessage: string;
+  isSplitTotalValid: boolean;
   isSavingExpense: boolean;
+  onSelectAllParticipants: () => void;
   onSaveExpense: () => void;
+  onShareAmountChange: (participantId: string, value: string) => void;
   participantsById: Record<string, ParticipantRecord>;
   participants: ParticipantRecord[];
   setAmount: (value: string) => void;
   setExpenseDate: (value: string) => void;
   setTitle: (value: string) => void;
+  shareValues: ExpenseShareValues;
+  splitTotal: number;
   splitPreview: Array<{ userId: string; shareAmount: number }>;
   title: string;
   toggleParticipant: (participantId: string) => void;
 }) {
+  const allParticipantsSelected =
+    participants.length > 0 && checkedIds.length === participants.length;
+
   return (
     <section className="grid gap-4 xl:grid-cols-[1fr_420px]">
       <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
@@ -1672,7 +1789,28 @@ function AddExpensePanel({
         </div>
 
         <div className="mt-6">
-          <h3 className="text-sm font-semibold">Pilih peserta yang menanggung</h3>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="text-sm font-semibold">Pilih peserta yang menanggung</h3>
+            <div className="flex gap-2">
+              <button
+                className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={participants.length === 0 || allParticipantsSelected}
+                onClick={onSelectAllParticipants}
+                type="button"
+              >
+                <Check size={14} strokeWidth={2.2} />
+                Pilih semua
+              </button>
+              <button
+                className="focus-ring inline-flex h-9 items-center justify-center rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={checkedIds.length === 0}
+                onClick={clearExpenseParticipants}
+                type="button"
+              >
+                Kosongkan
+              </button>
+            </div>
+          </div>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {participants.map((participant) => {
               const checked = checkedIds.includes(participant.id);
@@ -1717,17 +1855,26 @@ function AddExpensePanel({
       <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
         <h2 className="text-xl font-semibold">Preview rincian bagi</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Total dibagi rata hanya ke peserta yang dicentang.
+          Nominal awal dibagi rata, lalu bisa disesuaikan per peserta.
         </p>
         <div className="mt-5 grid gap-2">
           {splitPreview.length > 0 ? (
             splitPreview.map((share) => (
               <div
-                className="flex items-center justify-between rounded-md bg-muted px-3 py-2.5 text-sm"
+                className="grid gap-2 rounded-md bg-muted px-3 py-2.5 text-sm sm:grid-cols-[1fr_150px] sm:items-center"
                 key={share.userId}
               >
                 <span className="font-medium">{participantsById[share.userId]?.name}</span>
-                <span className="font-semibold">{formatRupiah(share.shareAmount)}</span>
+                <input
+                  aria-label={`Nilai pembayaran ${participantsById[share.userId]?.name}`}
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2 text-right text-sm font-semibold"
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    onShareAmountChange(share.userId, event.target.value)
+                  }
+                  placeholder="0"
+                  value={shareValues[share.userId] ?? ""}
+                />
               </div>
             ))
           ) : (
@@ -1736,9 +1883,23 @@ function AddExpensePanel({
             </div>
           )}
         </div>
+        {splitPreview.length > 0 ? (
+          <div
+            className={[
+              "mt-4 rounded-md border px-3 py-2 text-sm font-semibold",
+              isSplitTotalValid
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-destructive/25 bg-destructive/10 text-destructive",
+            ].join(" ")}
+          >
+            {isSplitTotalValid
+              ? `Total sudah sesuai: ${formatRupiah(splitTotal)}`
+              : `Total belum sesuai: ${formatRupiah(splitTotal)}`}
+          </div>
+        ) : null}
         <button
           className="focus-ring mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
-          disabled={isSavingExpense || checkedIds.length === 0}
+          disabled={isSavingExpense || checkedIds.length === 0 || !isSplitTotalValid}
           onClick={onSaveExpense}
           type="button"
         >
