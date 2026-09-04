@@ -195,16 +195,18 @@ describe("participant expense editing", () => {
 });
 
 describe("participant dashboard overview", () => {
-  it("does not show new notification and participant access sections", () => {
+  it("does not show notification and participant access sections or navigation", () => {
     for (const removedOverviewSection of [
       "Notifikasi baru",
       "Akses peserta",
       "AuthPreviewPanel",
+      '{ id: "notifications"',
+      "Riwayat notifikasi",
     ]) {
       assert.equal(
         trackerApp.includes(removedOverviewSection),
         false,
-        `${removedOverviewSection} should not be shown on the participant dashboard overview`,
+        `${removedOverviewSection} should not be shown on the participant dashboard`,
       );
     }
   });
@@ -353,7 +355,6 @@ describe("initial data loading states", () => {
       "useState<BootcampRecord[]>([])",
       "useState<ParticipantRecord[]>([])",
       "useState<ExpenseRecord[]>([])",
-      "useState<NotificationRecord[]>([])",
       "DashboardDataShimmer",
       "isLoadingDashboardData",
       "isLoadingAdminData",

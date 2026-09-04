@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowRight,
   Banknote,
-  Bell,
   CalendarClock,
   Check,
   ChevronRight,
@@ -53,7 +52,6 @@ import {
 import {
   bootcamps,
   expenses,
-  notifications,
   participants,
 } from "../lib/mock-data.js";
 import {
@@ -71,7 +69,6 @@ type View =
   | "transactions"
   | "add"
   | "members"
-  | "notifications"
   | "payables"
   | "receivables";
 
@@ -79,7 +76,6 @@ const currentUserId = "bima";
 
 type BootcampRecord = (typeof bootcamps)[number];
 type ExpenseRecord = (typeof expenses)[number];
-type NotificationRecord = (typeof notifications)[number];
 type ParticipantRecord = (typeof participants)[number];
 type SettlementPaymentRecord = {
   debtorId: string;
@@ -133,7 +129,6 @@ const navItems = [
   { id: "transactions", label: "Rekap", icon: ReceiptText },
   { id: "add", label: "Tambah", icon: Plus },
   { id: "members", label: "Peserta", icon: Users },
-  { id: "notifications", label: "Notifikasi", icon: Bell },
 ] satisfies Array<{ id: View; label: string; icon: typeof LayoutDashboard }>;
 
 const adminNavItems = [
@@ -172,7 +167,6 @@ export function BootcampTrackerApp() {
   const [managedBootcamps, setManagedBootcamps] = useState<BootcampRecord[]>([]);
   const [allParticipants, setAllParticipants] = useState<ParticipantRecord[]>([]);
   const [allExpenses, setAllExpenses] = useState<ExpenseRecord[]>([]);
-  const [allNotifications, setAllNotifications] = useState<NotificationRecord[]>([]);
   const [allSettlementPayments, setAllSettlementPayments] = useState<
     SettlementPaymentRecord[]
   >([]);
@@ -251,7 +245,6 @@ export function BootcampTrackerApp() {
         setManagedBootcamps(state.bootcamps);
         setAllParticipants(state.participants);
         setAllExpenses(state.expenses);
-        setAllNotifications(state.notifications);
         setAllSettlementPayments(state.settlementPayments ?? []);
 
         if (nextParticipant) {
@@ -332,19 +325,6 @@ export function BootcampTrackerApp() {
       );
     },
     [allExpenses, participantBootcamp],
-  );
-
-  const bootcampNotifications = useMemo(
-    () => {
-      if (!participantBootcamp) {
-        return [];
-      }
-
-      return allNotifications.filter(
-        (notification) => notification.bootcampId === participantBootcamp.id,
-      );
-    },
-    [allNotifications, participantBootcamp],
   );
 
   const summary = useMemo(
@@ -611,7 +591,6 @@ export function BootcampTrackerApp() {
       setManagedBootcamps(result.state.bootcamps);
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
-      setAllNotifications(result.state.notifications);
       setAllSettlementPayments(result.state.settlementPayments ?? []);
       resetParticipantExpenseEditForm();
       setExpenseFormMessage("Perubahan pengeluaran tersimpan.");
@@ -659,7 +638,6 @@ export function BootcampTrackerApp() {
       setManagedBootcamps(result.state.bootcamps);
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
-      setAllNotifications(result.state.notifications);
       setAllSettlementPayments(result.state.settlementPayments ?? []);
       setPaymentTarget(null);
       setExpenseFormMessage("Pembayaran ditandai sudah bayar.");
@@ -742,7 +720,6 @@ export function BootcampTrackerApp() {
       setManagedBootcamps(result.state.bootcamps);
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
-      setAllNotifications(result.state.notifications);
       setAllSettlementPayments(result.state.settlementPayments ?? []);
       setTitle("");
       setAmount("");
@@ -939,10 +916,6 @@ export function BootcampTrackerApp() {
             <MembersPanel participants={bootcampParticipants} />
           ) : null}
 
-          {activeView === "notifications" ? (
-            <NotificationsPanel notifications={bootcampNotifications} />
-          ) : null}
-
         </section>
       </div>
     </main>
@@ -1051,7 +1024,6 @@ function Header({
     transactions: "Rekap pengeluaran",
     add: "Tambah pengeluaran",
     members: "Daftar peserta",
-    notifications: "Riwayat notifikasi",
     payables: "Tagihan saya",
     receivables: "Piutang saya",
   };
@@ -1962,37 +1934,6 @@ function MembersPanel({ participants }: { participants: ParticipantRecord[] }) {
               </p>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">{participant.phone}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function NotificationsPanel({
-  notifications,
-}: {
-  notifications: NotificationRecord[];
-}) {
-  return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
-      <h2 className="text-xl font-semibold">Riwayat notifikasi</h2>
-      <div className="mt-5 grid gap-3">
-        {notifications.map((notification) => (
-          <article
-            className="grid gap-3 rounded-lg border border-border bg-card p-4 sm:grid-cols-[auto_1fr_auto] sm:items-start"
-            key={notification.id}
-          >
-            <div className="grid size-10 place-items-center rounded-md bg-accent text-accent-foreground">
-              <Bell size={18} strokeWidth={1.8} />
-            </div>
-            <div>
-              <h3 className="font-semibold">{notification.title}</h3>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                {notification.message}
-              </p>
-            </div>
-            <span className="text-sm text-muted-foreground">{notification.sentAt}</span>
           </article>
         ))}
       </div>
