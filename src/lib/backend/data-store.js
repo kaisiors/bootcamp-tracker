@@ -5,8 +5,11 @@ import { join } from "node:path";
 import pg from "pg";
 
 import { createBootcampFromDraft } from "../bootcamp-store.js";
-import { createExpenseFromDraft } from "../expense-store.js";
-import { parseRupiahInput, splitExpenseEvenly } from "../finance.js";
+import {
+  createExpenseFromDraft,
+  resolveExpenseParticipantShares,
+} from "../expense-store.js";
+import { parseRupiahInput } from "../finance.js";
 import { bootcamps, expenses, notifications, participants } from "../mock-data.js";
 import { createParticipantFromRegistration } from "../participant-store.js";
 
@@ -510,7 +513,11 @@ export async function updateExpense(id, payload, options = {}) {
       bootcampId: bootcamp.id,
       expenseDate: requireString(payload.expenseDate, "Tanggal transaksi"),
       id,
-      participants: splitExpenseEvenly(amount, participantIds),
+      participants: resolveExpenseParticipantShares(
+        amount,
+        participantIds,
+        payload.participantShares,
+      ),
       payerId: payer.id,
       title: requireString(payload.title, "Judul pengeluaran"),
     };

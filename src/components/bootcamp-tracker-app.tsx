@@ -161,6 +161,14 @@ function createEvenExpenseShareValues(
   );
 }
 
+function createExpenseShareValuesFromSplits(
+  splits: ExpenseRecord["participants"],
+): ExpenseShareValues {
+  return Object.fromEntries(
+    splits.map((share) => [share.userId, formatRupiahInput(share.shareAmount)]),
+  );
+}
+
 export function BootcampTrackerApp() {
   const router = useRouter();
   const [activeView, setActiveView] = useState<View>("overview");
@@ -190,6 +198,8 @@ export function BootcampTrackerApp() {
     participantEditExpenseParticipantIds,
     setParticipantEditExpenseParticipantIds,
   ] = useState<string[]>([]);
+  const [participantEditExpenseShareValues, setParticipantEditExpenseShareValues] =
+    useState<ExpenseShareValues>({});
   const [isSavingParticipantExpenseEdit, setIsSavingParticipantExpenseEdit] =
     useState(false);
   const [paymentTarget, setPaymentTarget] = useState<PaymentTarget | null>(null);
@@ -426,6 +436,27 @@ export function BootcampTrackerApp() {
     );
   }, [bootcampParticipants, participantEditExpenseParticipantIds]);
 
+  const participantEditSplitPreview = useMemo(() => {
+    return participantEditVisibleCheckedIds.map((userId) => ({
+      userId,
+      shareAmount: parseRupiahInput(participantEditExpenseShareValues[userId]),
+    }));
+  }, [participantEditExpenseShareValues, participantEditVisibleCheckedIds]);
+  const participantEditSplitTotal = participantEditSplitPreview.reduce(
+    (total, share) => total + share.shareAmount,
+    0,
+  );
+  const participantEditNumericAmount = parseRupiahInput(
+    participantEditExpenseAmount,
+  );
+  const isParticipantEditSplitTotalValid =
+    Number.isInteger(participantEditNumericAmount) &&
+    participantEditNumericAmount > 0 &&
+    participantEditSplitTotal === participantEditNumericAmount &&
+    participantEditSplitPreview.every(
+      (share) => Number.isInteger(share.shareAmount) && share.shareAmount > 0,
+    );
+
   const splitPreview = useMemo(() => {
     return visibleCheckedIds.map((userId) => ({
       userId,
@@ -537,6 +568,9 @@ export function BootcampTrackerApp() {
     setParticipantEditExpenseParticipantIds(
       expense.participants.map((participant) => participant.userId),
     );
+    setParticipantEditExpenseShareValues(
+      createExpenseShareValuesFromSplits(expense.participants),
+    );
     setExpenseFormMessage("");
   }
 
@@ -546,14 +580,62 @@ export function BootcampTrackerApp() {
     setParticipantEditExpenseAmount("");
     setParticipantEditExpenseDate("");
     setParticipantEditExpenseParticipantIds([]);
+    setParticipantEditExpenseShareValues({});
   }
 
   function toggleParticipantExpenseEditParticipant(participantId: string) {
-    setParticipantEditExpenseParticipantIds((selected) =>
-      selected.includes(participantId)
-        ? selected.filter((id) => id !== participantId)
-        : [...selected, participantId],
+    const nextParticipantIds = participantEditExpenseParticipantIds.includes(
+      participantId,
+    )
+      ? participantEditExpenseParticipantIds.filter((id) => id !== participantId)
+      : [...participantEditExpenseParticipantIds, participantId];
+    const visibleParticipantIds = new Set(
+      bootcampParticipants.map((participant) => participant.id),
     );
+    const nextVisibleParticipantIds = nextParticipantIds.filter((id) =>
+      visibleParticipantIds.has(id),
+    );
+
+    setParticipantEditExpenseParticipantIds(nextParticipantIds);
+    setParticipantEditExpenseShareValues(
+      createEvenExpenseShareValues(
+        participantEditExpenseAmount,
+        nextVisibleParticipantIds,
+      ),
+    );
+  }
+
+  function setAllParticipantExpenseEditParticipants() {
+    const participantIds = bootcampParticipants.map((participant) => participant.id);
+
+    setParticipantEditExpenseParticipantIds(participantIds);
+    setParticipantEditExpenseShareValues(
+      createEvenExpenseShareValues(participantEditExpenseAmount, participantIds),
+    );
+  }
+
+  function clearParticipantExpenseEditParticipants() {
+    setParticipantEditExpenseParticipantIds([]);
+    setParticipantEditExpenseShareValues({});
+  }
+
+  function handleParticipantEditExpenseAmountChange(value: string) {
+    const nextAmount = formatRupiahInput(value);
+
+    setParticipantEditExpenseAmount(nextAmount);
+    setParticipantEditExpenseShareValues(
+      createEvenExpenseShareValues(nextAmount, participantEditVisibleCheckedIds),
+    );
+  }
+
+  function handleParticipantEditExpenseShareAmountChange(
+    participantId: string,
+    value: string,
+  ) {
+    setParticipantEditExpenseShareValues((current) => ({
+      ...current,
+      [participantId]: formatRupiahInput(value),
+    }));
   }
 
   async function handleSubmitParticipantExpenseEdit(
@@ -576,6 +658,22 @@ export function BootcampTrackerApp() {
       return;
     }
 
+    if (
+      participantEditSplitPreview.some(
+        (share) => !Number.isInteger(share.shareAmount) || share.shareAmount <= 0,
+      )
+    ) {
+      setExpenseFormMessage("Nominal setiap peserta harus lebih dari 0.");
+      return;
+    }
+
+    if (!isParticipantEditSplitTotalValid) {
+      setExpenseFormMessage(
+        "Total belum sesuai. Total pembayaran peserta harus sama dengan nominal pengeluaran.",
+      );
+      return;
+    }
+
     setIsSavingParticipantExpenseEdit(true);
 
     try {
@@ -584,6 +682,7 @@ export function BootcampTrackerApp() {
         bootcampId: participantBootcampId,
         expenseDate: participantEditExpenseDate,
         participantIds: participantEditVisibleCheckedIds,
+        participantShares: participantEditSplitPreview,
         payerId: currentParticipant.id,
         title: participantEditExpenseTitle,
       });
@@ -851,20 +950,37 @@ export function BootcampTrackerApp() {
               filteredExpenses={filteredExpenses}
               isSavingParticipantExpenseEdit={isSavingParticipantExpenseEdit}
               onCancelParticipantExpenseEdit={resetParticipantExpenseEditForm}
+              onClearParticipantExpenseEditParticipants={
+                clearParticipantExpenseEditParticipants
+              }
               onStartParticipantExpenseEdit={startParticipantExpenseEdit}
               onSubmitParticipantExpenseEdit={handleSubmitParticipantExpenseEdit}
+              onParticipantEditShareAmountChange={
+                handleParticipantEditExpenseShareAmountChange
+              }
+              onSelectAllParticipantExpenseEditParticipants={
+                setAllParticipantExpenseEditParticipants
+              }
               participantEditExpenseAmount={participantEditExpenseAmount}
               participantEditExpenseDate={participantEditExpenseDate}
               participantEditExpenseParticipantIds={participantEditVisibleCheckedIds}
+              participantEditExpenseShareValues={
+                participantEditExpenseShareValues
+              }
               participantEditExpenseTitle={participantEditExpenseTitle}
               participantEditingExpenseId={participantEditingExpenseId}
+              participantEditSplitPreview={participantEditSplitPreview}
+              participantEditSplitTotal={participantEditSplitTotal}
               participantsById={participantsById}
               participants={bootcampParticipants}
               query={query}
               setQuery={setQuery}
-              setParticipantEditExpenseAmount={setParticipantEditExpenseAmount}
+              setParticipantEditExpenseAmount={
+                handleParticipantEditExpenseAmountChange
+              }
               setParticipantEditExpenseDate={setParticipantEditExpenseDate}
               setParticipantEditExpenseTitle={setParticipantEditExpenseTitle}
+              isParticipantEditSplitTotalValid={isParticipantEditSplitTotalValid}
               toggleParticipantExpenseEditParticipant={
                 toggleParticipantExpenseEditParticipant
               }
@@ -1437,15 +1553,22 @@ function PaymentInfoRow({ label, value }: { label: string; value: string }) {
 function TransactionsPanel({
   currentParticipant,
   filteredExpenses,
+  isParticipantEditSplitTotalValid,
   isSavingParticipantExpenseEdit,
   onCancelParticipantExpenseEdit,
+  onClearParticipantExpenseEditParticipants,
+  onParticipantEditShareAmountChange,
+  onSelectAllParticipantExpenseEditParticipants,
   onStartParticipantExpenseEdit,
   onSubmitParticipantExpenseEdit,
   participantEditExpenseAmount,
   participantEditExpenseDate,
   participantEditExpenseParticipantIds,
+  participantEditExpenseShareValues,
   participantEditExpenseTitle,
   participantEditingExpenseId,
+  participantEditSplitPreview,
+  participantEditSplitTotal,
   participantsById,
   participants,
   query,
@@ -1457,8 +1580,12 @@ function TransactionsPanel({
 }: {
   currentParticipant: ParticipantRecord;
   filteredExpenses: ExpenseRecord[];
+  isParticipantEditSplitTotalValid: boolean;
   isSavingParticipantExpenseEdit: boolean;
   onCancelParticipantExpenseEdit: () => void;
+  onClearParticipantExpenseEditParticipants: () => void;
+  onParticipantEditShareAmountChange: (participantId: string, value: string) => void;
+  onSelectAllParticipantExpenseEditParticipants: () => void;
   onStartParticipantExpenseEdit: (expense: ExpenseRecord) => void;
   onSubmitParticipantExpenseEdit: (
     event: React.FormEvent<HTMLFormElement>,
@@ -1466,8 +1593,11 @@ function TransactionsPanel({
   participantEditExpenseAmount: string;
   participantEditExpenseDate: string;
   participantEditExpenseParticipantIds: string[];
+  participantEditExpenseShareValues: ExpenseShareValues;
   participantEditExpenseTitle: string;
   participantEditingExpenseId: string | null;
+  participantEditSplitPreview: Array<{ userId: string; shareAmount: number }>;
+  participantEditSplitTotal: number;
   participantsById: Record<string, ParticipantRecord>;
   participants: ParticipantRecord[];
   query: string;
@@ -1477,6 +1607,10 @@ function TransactionsPanel({
   setParticipantEditExpenseTitle: (value: string) => void;
   toggleParticipantExpenseEditParticipant: (participantId: string) => void;
 }) {
+  const allEditParticipantsSelected =
+    participants.length > 0 &&
+    participantEditExpenseParticipantIds.length === participants.length;
+
   return (
     <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1499,126 +1633,142 @@ function TransactionsPanel({
 
       {participantEditingExpenseId ? (
         <form
-          className="mt-5 grid gap-4 rounded-lg border border-border bg-muted p-4 md:grid-cols-2 xl:grid-cols-[1fr_0.75fr_0.75fr]"
+          className="mt-5 grid gap-4 xl:grid-cols-[1fr_420px]"
           onSubmit={onSubmitParticipantExpenseEdit}
         >
-          <div className="md:col-span-2 xl:col-span-3">
-            <h3 className="text-base font-semibold">Edit pengeluaran</h3>
+          <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+            <h3 className="text-xl font-semibold">Edit pengeluaran</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Peserta hanya bisa mengubah transaksi yang dibuat sendiri.
             </p>
-          </div>
-          <label className="grid gap-2 text-sm font-medium">
-            Judul
-            <input
-              className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-              onChange={(event) =>
-                setParticipantEditExpenseTitle(event.target.value)
-              }
-              placeholder="Kopi dan snack review project"
-              required
-              value={participantEditExpenseTitle}
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-medium">
-            Nominal
-            <input
-              className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-              inputMode="numeric"
-              onChange={(event) =>
-                setParticipantEditExpenseAmount(formatRupiahInput(event.target.value))
-              }
-              placeholder="100.000"
-              required
-              value={participantEditExpenseAmount}
-            />
-          </label>
-          <label className="grid gap-2 text-sm font-medium">
-            Tanggal
-            <input
-              className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-              onChange={(event) =>
-                setParticipantEditExpenseDate(event.target.value)
-              }
-              required
-              type="date"
-              value={participantEditExpenseDate}
-            />
-          </label>
-          <div className="grid gap-2 md:col-span-2 xl:col-span-3">
-            <p className="text-sm font-medium">Peserta yang menanggung</p>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {participants.map((participant) => {
-                const checked = participantEditExpenseParticipantIds.includes(
-                  participant.id,
-                );
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2 text-sm font-medium md:col-span-2">
+                Judul pengeluaran
+                <input
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  onChange={(event) =>
+                    setParticipantEditExpenseTitle(event.target.value)
+                  }
+                  placeholder="Kopi dan snack review project"
+                  required
+                  value={participantEditExpenseTitle}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Nominal
+                <input
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    setParticipantEditExpenseAmount(event.target.value)
+                  }
+                  placeholder="100.000"
+                  required
+                  value={participantEditExpenseAmount}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Tanggal
+                <input
+                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                  onChange={(event) =>
+                    setParticipantEditExpenseDate(event.target.value)
+                  }
+                  placeholder="2026-08-18"
+                  required
+                  type="date"
+                  value={participantEditExpenseDate}
+                />
+              </label>
+            </div>
 
-                return (
+            <div className="mt-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h4 className="text-sm font-semibold">
+                  Pilih peserta yang menanggung
+                </h4>
+                <div className="flex gap-2">
                   <button
-                    className={[
-                      "focus-ring flex items-center justify-between rounded-md border bg-card px-3 py-2.5 text-left text-sm transition active:translate-y-px",
-                      checked
-                        ? "border-primary bg-accent"
-                        : "border-border hover:bg-card/70",
-                    ].join(" ")}
-                    key={participant.id}
-                    onClick={() =>
-                      toggleParticipantExpenseEditParticipant(participant.id)
-                    }
+                    className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={participants.length === 0 || allEditParticipantsSelected}
+                    onClick={onSelectAllParticipantExpenseEditParticipants}
                     type="button"
                   >
-                    <span>
-                      <span className="block font-semibold">{participant.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {participant.id === currentParticipant.id
-                          ? "Pencatat transaksi"
-                          : participant.email}
-                      </span>
-                    </span>
-                    <span
-                      className={[
-                        "grid size-5 place-items-center rounded border",
-                        checked
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-card",
-                      ].join(" ")}
-                    >
-                      {checked ? <Check size={14} strokeWidth={2.2} /> : null}
-                    </span>
+                    <Check size={14} strokeWidth={2.2} />
+                    Pilih semua
                   </button>
-                );
-              })}
+                  <button
+                    className="focus-ring inline-flex h-9 items-center justify-center rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={participantEditExpenseParticipantIds.length === 0}
+                    onClick={onClearParticipantExpenseEditParticipants}
+                    type="button"
+                  >
+                    Kosongkan
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {participants.map((participant) => {
+                  const checked = participantEditExpenseParticipantIds.includes(
+                    participant.id,
+                  );
+
+                  return (
+                    <button
+                      className={[
+                        "focus-ring flex items-center justify-between rounded-md border px-3 py-3 text-left transition active:translate-y-px",
+                        checked
+                          ? "border-primary bg-accent"
+                          : "border-border bg-card hover:bg-muted",
+                      ].join(" ")}
+                      key={participant.id}
+                      onClick={() =>
+                        toggleParticipantExpenseEditParticipant(participant.id)
+                      }
+                      type="button"
+                    >
+                      <span>
+                        <span className="block text-sm font-semibold">
+                          {participant.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {participant.id === currentParticipant.id
+                            ? "Pencatat, ikut jika dicentang"
+                            : participant.email}
+                        </span>
+                      </span>
+                      <span
+                        className={[
+                          "grid size-5 place-items-center rounded border",
+                          checked
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card",
+                        ].join(" ")}
+                      >
+                        {checked ? <Check size={14} strokeWidth={2.2} /> : null}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-          <div className="flex flex-col gap-2 md:col-span-2 md:flex-row md:justify-end xl:col-span-3">
-            <button
-              className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-card/70 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
-              disabled={isSavingParticipantExpenseEdit}
-              onClick={onCancelParticipantExpenseEdit}
-              type="button"
-            >
-              Batal edit pengeluaran
-            </button>
-            <button
-              className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
-              disabled={
-                isSavingParticipantExpenseEdit ||
-                participantEditExpenseParticipantIds.length === 0
-              }
-              type="submit"
-            >
-              {isSavingParticipantExpenseEdit ? (
-                <LoaderCircle
-                  className="animate-spin"
-                  size={17}
-                  strokeWidth={1.8}
-                />
-              ) : (
-                <Pencil size={17} strokeWidth={1.8} />
-              )}
-              {isSavingParticipantExpenseEdit ? "Menyimpan..." : "Simpan perubahan"}
-            </button>
-          </div>
+
+          <ExpenseSplitPreviewPanel
+            cancelLabel="Batal edit pengeluaran"
+            checkedIds={participantEditExpenseParticipantIds}
+            isSaving={isSavingParticipantExpenseEdit}
+            isSplitTotalValid={isParticipantEditSplitTotalValid}
+            onCancel={onCancelParticipantExpenseEdit}
+            onShareAmountChange={onParticipantEditShareAmountChange}
+            participantsById={participantsById}
+            saveIcon="edit"
+            saveLabel="Simpan perubahan"
+            savingLabel="Menyimpan..."
+            shareValues={participantEditExpenseShareValues}
+            splitPreview={participantEditSplitPreview}
+            splitTotal={participantEditSplitTotal}
+          />
         </form>
       ) : null}
 
@@ -1822,71 +1972,137 @@ function AddExpensePanel({
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
-        <h2 className="text-xl font-semibold">Preview rincian bagi</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Nominal awal dibagi rata, lalu bisa disesuaikan per peserta.
-        </p>
-        <div className="mt-5 grid gap-2">
-          {splitPreview.length > 0 ? (
-            splitPreview.map((share) => (
-              <div
-                className="grid gap-2 rounded-md bg-muted px-3 py-2.5 text-sm sm:grid-cols-[1fr_150px] sm:items-center"
-                key={share.userId}
-              >
-                <span className="font-medium">{participantsById[share.userId]?.name}</span>
-                <input
-                  aria-label={`Nilai pembayaran ${participantsById[share.userId]?.name}`}
-                  className="focus-ring rounded-md border border-border bg-card px-3 py-2 text-right text-sm font-semibold"
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    onShareAmountChange(share.userId, event.target.value)
-                  }
-                  placeholder="0"
-                  value={shareValues[share.userId] ?? ""}
-                />
-              </div>
-            ))
-          ) : (
-            <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              Isi nominal dan pilih minimal satu peserta.
-            </div>
-          )}
-        </div>
+      <ExpenseSplitPreviewPanel
+        checkedIds={checkedIds}
+        isSaving={isSavingExpense}
+        isSplitTotalValid={isSplitTotalValid}
+        message={expenseFormMessage}
+        onSave={onSaveExpense}
+        onShareAmountChange={onShareAmountChange}
+        participantsById={participantsById}
+        saveIcon="next"
+        saveLabel="Simpan pengeluaran"
+        savingLabel="Menyimpan..."
+        shareValues={shareValues}
+        splitPreview={splitPreview}
+        splitTotal={splitTotal}
+      />
+    </section>
+  );
+}
+
+function ExpenseSplitPreviewPanel({
+  cancelLabel,
+  checkedIds,
+  isSaving,
+  isSplitTotalValid,
+  message,
+  onCancel,
+  onSave,
+  onShareAmountChange,
+  participantsById,
+  saveIcon,
+  saveLabel,
+  savingLabel,
+  shareValues,
+  splitPreview,
+  splitTotal,
+}: {
+  cancelLabel?: string;
+  checkedIds: string[];
+  isSaving: boolean;
+  isSplitTotalValid: boolean;
+  message?: string;
+  onCancel?: () => void;
+  onSave?: () => void;
+  onShareAmountChange: (participantId: string, value: string) => void;
+  participantsById: Record<string, ParticipantRecord>;
+  saveIcon: "edit" | "next";
+  saveLabel: string;
+  savingLabel: string;
+  shareValues: ExpenseShareValues;
+  splitPreview: Array<{ userId: string; shareAmount: number }>;
+  splitTotal: number;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+      <h2 className="text-xl font-semibold">Preview rincian bagi</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Nominal awal dibagi rata, lalu bisa disesuaikan per peserta.
+      </p>
+      <div className="mt-5 grid gap-2">
         {splitPreview.length > 0 ? (
-          <div
-            className={[
-              "mt-4 rounded-md border px-3 py-2 text-sm font-semibold",
-              isSplitTotalValid
-                ? "border-accent bg-accent text-accent-foreground"
-                : "border-destructive/25 bg-destructive/10 text-destructive",
-            ].join(" ")}
-          >
-            {isSplitTotalValid
-              ? `Total sudah sesuai: ${formatRupiah(splitTotal)}`
-              : `Total belum sesuai: ${formatRupiah(splitTotal)}`}
+          splitPreview.map((share) => (
+            <div
+              className="grid gap-2 rounded-md bg-muted px-3 py-2.5 text-sm sm:grid-cols-[1fr_150px] sm:items-center"
+              key={share.userId}
+            >
+              <span className="font-medium">{participantsById[share.userId]?.name}</span>
+              <input
+                aria-label={`Nilai pembayaran ${participantsById[share.userId]?.name}`}
+                className="focus-ring rounded-md border border-border bg-card px-3 py-2 text-right text-sm font-semibold"
+                inputMode="numeric"
+                onChange={(event) =>
+                  onShareAmountChange(share.userId, event.target.value)
+                }
+                placeholder="0"
+                value={shareValues[share.userId] ?? ""}
+              />
+            </div>
+          ))
+        ) : (
+          <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+            Isi nominal dan pilih minimal satu peserta.
           </div>
+        )}
+      </div>
+      {splitPreview.length > 0 ? (
+        <div
+          className={[
+            "mt-4 rounded-md border px-3 py-2 text-sm font-semibold",
+            isSplitTotalValid
+              ? "border-accent bg-accent text-accent-foreground"
+              : "border-destructive/25 bg-destructive/10 text-destructive",
+          ].join(" ")}
+        >
+          {isSplitTotalValid
+            ? `Total sudah sesuai: ${formatRupiah(splitTotal)}`
+            : `Total belum sesuai: ${formatRupiah(splitTotal)}`}
+        </div>
+      ) : null}
+      <div className="mt-5 grid gap-2">
+        {onCancel ? (
+          <button
+            className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
+            disabled={isSaving}
+            onClick={onCancel}
+            type="button"
+          >
+            {cancelLabel}
+          </button>
         ) : null}
         <button
-          className="focus-ring mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
-          disabled={isSavingExpense || checkedIds.length === 0 || !isSplitTotalValid}
-          onClick={onSaveExpense}
-          type="button"
+          className="focus-ring flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+          disabled={isSaving || checkedIds.length === 0 || !isSplitTotalValid}
+          onClick={onSave}
+          type={onSave ? "button" : "submit"}
         >
-          {isSavingExpense ? (
+          {isSaving ? (
             <LoaderCircle className="animate-spin" size={17} strokeWidth={1.8} />
+          ) : saveIcon === "edit" ? (
+            <Pencil size={17} strokeWidth={1.8} />
           ) : (
             <ArrowRight size={17} strokeWidth={1.8} />
           )}
-          {isSavingExpense ? "Menyimpan..." : "Simpan pengeluaran"}
+          {isSaving ? savingLabel : saveLabel}
         </button>
-        {expenseFormMessage ? (
-          <p className="mt-3 rounded-md border border-border bg-muted px-3 py-2 text-sm font-medium text-foreground">
-            {expenseFormMessage}
-          </p>
-        ) : null}
       </div>
-    </section>
+      {message ? (
+        <p className="mt-3 rounded-md border border-border bg-muted px-3 py-2 text-sm font-medium text-foreground">
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1975,6 +2191,8 @@ export function AdminWorkspace() {
   const [editExpenseParticipantIds, setEditExpenseParticipantIds] = useState<
     string[]
   >([]);
+  const [editExpenseShareValues, setEditExpenseShareValues] =
+    useState<ExpenseShareValues>({});
   const [adminMessage, setAdminMessage] = useState("");
   const [isSavingBootcamp, setIsSavingBootcamp] = useState(false);
   const [isCreatingParticipant, setIsCreatingParticipant] = useState(false);
@@ -2039,6 +2257,32 @@ export function AdminWorkspace() {
   const editExpenseParticipants = allParticipants.filter((participant) =>
     participant.bootcampIds.includes(editExpenseBootcampId),
   );
+  const editExpenseVisibleCheckedIds = useMemo(() => {
+    const visibleParticipantIds = new Set(
+      editExpenseParticipants.map((participant) => participant.id),
+    );
+    return editExpenseParticipantIds.filter((participantId) =>
+      visibleParticipantIds.has(participantId),
+    );
+  }, [editExpenseParticipantIds, editExpenseParticipants]);
+  const editExpenseSplitPreview = useMemo(() => {
+    return editExpenseVisibleCheckedIds.map((userId) => ({
+      userId,
+      shareAmount: parseRupiahInput(editExpenseShareValues[userId]),
+    }));
+  }, [editExpenseShareValues, editExpenseVisibleCheckedIds]);
+  const editExpenseSplitTotal = editExpenseSplitPreview.reduce(
+    (total, share) => total + share.shareAmount,
+    0,
+  );
+  const editExpenseNumericAmount = parseRupiahInput(editExpenseAmount);
+  const isEditExpenseSplitTotalValid =
+    Number.isInteger(editExpenseNumericAmount) &&
+    editExpenseNumericAmount > 0 &&
+    editExpenseSplitTotal === editExpenseNumericAmount &&
+    editExpenseSplitPreview.every(
+      (share) => Number.isInteger(share.shareAmount) && share.shareAmount > 0,
+    );
   const totalExpenseAmount = allExpenses.reduce(
     (total, expense) => total + expense.amount,
     0,
@@ -2068,6 +2312,9 @@ export function AdminWorkspace() {
           : isDeletingRecord
             ? "Menghapus data..."
             : "Memproses...";
+  const allEditExpenseParticipantsSelected =
+    editExpenseParticipants.length > 0 &&
+    editExpenseVisibleCheckedIds.length === editExpenseParticipants.length;
 
   if (isLoadingAdminData) {
     return <DashboardDataShimmer label="Memuat data admin..." />;
@@ -2180,6 +2427,7 @@ export function AdminWorkspace() {
     setEditExpenseParticipantIds(
       expense.participants.map((participant) => participant.userId),
     );
+    setEditExpenseShareValues(createExpenseShareValuesFromSplits(expense.participants));
     setActiveAdminView("expenses");
     setAdminMessage("");
   }
@@ -2192,20 +2440,61 @@ export function AdminWorkspace() {
     setEditExpenseDate("");
     setEditExpensePayerId("");
     setEditExpenseParticipantIds([]);
+    setEditExpenseShareValues({});
   }
 
   function handleEditExpenseBootcampChange(bootcampId: string) {
     setEditExpenseBootcampId(bootcampId);
     setEditExpensePayerId("");
     setEditExpenseParticipantIds([]);
+    setEditExpenseShareValues({});
   }
 
   function toggleEditExpenseParticipant(participantId: string) {
-    setEditExpenseParticipantIds((selected) =>
-      selected.includes(participantId)
-        ? selected.filter((id) => id !== participantId)
-        : [...selected, participantId],
+    const nextParticipantIds = editExpenseParticipantIds.includes(participantId)
+      ? editExpenseParticipantIds.filter((id) => id !== participantId)
+      : [...editExpenseParticipantIds, participantId];
+    const visibleParticipantIds = new Set(
+      editExpenseParticipants.map((participant) => participant.id),
     );
+    const nextVisibleParticipantIds = nextParticipantIds.filter((id) =>
+      visibleParticipantIds.has(id),
+    );
+
+    setEditExpenseParticipantIds(nextParticipantIds);
+    setEditExpenseShareValues(
+      createEvenExpenseShareValues(editExpenseAmount, nextVisibleParticipantIds),
+    );
+  }
+
+  function setAllEditExpenseParticipants() {
+    const participantIds = editExpenseParticipants.map((participant) => participant.id);
+
+    setEditExpenseParticipantIds(participantIds);
+    setEditExpenseShareValues(
+      createEvenExpenseShareValues(editExpenseAmount, participantIds),
+    );
+  }
+
+  function clearEditExpenseParticipants() {
+    setEditExpenseParticipantIds([]);
+    setEditExpenseShareValues({});
+  }
+
+  function handleEditExpenseAmountChange(value: string) {
+    const nextAmount = formatRupiahInput(value);
+
+    setEditExpenseAmount(nextAmount);
+    setEditExpenseShareValues(
+      createEvenExpenseShareValues(nextAmount, editExpenseVisibleCheckedIds),
+    );
+  }
+
+  function handleEditExpenseShareAmountChange(participantId: string, value: string) {
+    setEditExpenseShareValues((current) => ({
+      ...current,
+      [participantId]: formatRupiahInput(value),
+    }));
   }
 
   async function handleSubmitExpenseEdit(event: React.FormEvent<HTMLFormElement>) {
@@ -2215,8 +2504,24 @@ export function AdminWorkspace() {
       return;
     }
 
-    if (editExpenseParticipantIds.length === 0) {
+    if (editExpenseVisibleCheckedIds.length === 0) {
       setAdminMessage("Pilih minimal satu peserta yang menanggung transaksi.");
+      return;
+    }
+
+    if (
+      editExpenseSplitPreview.some(
+        (share) => !Number.isInteger(share.shareAmount) || share.shareAmount <= 0,
+      )
+    ) {
+      setAdminMessage("Nominal setiap peserta harus lebih dari 0.");
+      return;
+    }
+
+    if (!isEditExpenseSplitTotalValid) {
+      setAdminMessage(
+        "Total belum sesuai. Total pembayaran peserta harus sama dengan nominal pengeluaran.",
+      );
       return;
     }
 
@@ -2227,7 +2532,8 @@ export function AdminWorkspace() {
         amount: editExpenseAmount,
         bootcampId: editExpenseBootcampId,
         expenseDate: editExpenseDate,
-        participantIds: editExpenseParticipantIds,
+        participantIds: editExpenseVisibleCheckedIds,
+        participantShares: editExpenseSplitPreview,
         payerId: editExpensePayerId,
         title: editExpenseTitle,
       });
@@ -2957,153 +3263,175 @@ export function AdminWorkspace() {
           </div>
           {editingExpenseId ? (
             <form
-              className="mt-5 grid gap-4 rounded-lg border border-border bg-muted p-4 md:grid-cols-2 xl:grid-cols-[1fr_0.7fr_0.9fr_0.75fr_0.9fr]"
+              className="mt-5 grid gap-4 xl:grid-cols-[1fr_420px]"
               onSubmit={handleSubmitExpenseEdit}
             >
-              <div className="md:col-span-2 xl:col-span-5">
-                <h3 className="text-base font-semibold">Edit transaksi</h3>
+              <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+                <h3 className="text-xl font-semibold">Edit transaksi</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Ubah detail transaksi, lalu pilih ulang peserta yang menanggung.
+                  Ubah detail transaksi, lalu atur ulang pembagian per peserta.
                 </p>
-              </div>
-              <label className="grid gap-2 text-sm font-medium">
-                Judul
-                <input
-                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-                  onChange={(event) => setEditExpenseTitle(event.target.value)}
-                  placeholder="Kopi dan snack review project"
-                  required
-                  value={editExpenseTitle}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-medium">
-                Nominal
-                <input
-                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setEditExpenseAmount(formatRupiahInput(event.target.value))
-                  }
-                  placeholder="100.000"
-                  required
-                  value={editExpenseAmount}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-medium">
-                Bootcamp
-                <select
-                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-                  onChange={(event) =>
-                    handleEditExpenseBootcampChange(event.target.value)
-                  }
-                  required
-                  value={editExpenseBootcampId}
-                >
-                  <option disabled value="">
-                    Pilih bootcamp transaksi
-                  </option>
-                  {managedBootcamps.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-2 text-sm font-medium">
-                Tanggal
-                <input
-                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-                  onChange={(event) => setEditExpenseDate(event.target.value)}
-                  required
-                  type="date"
-                  value={editExpenseDate}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-medium">
-                Pembayar
-                <select
-                  className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-                  onChange={(event) => setEditExpensePayerId(event.target.value)}
-                  required
-                  value={editExpensePayerId}
-                >
-                  <option disabled value="">
-                    Pilih pembayar
-                  </option>
-                  {editExpenseParticipants.map((participant) => (
-                    <option key={participant.id} value={participant.id}>
-                      {participant.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="grid gap-2 md:col-span-2 xl:col-span-5">
-                <p className="text-sm font-medium">Peserta yang menanggung</p>
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  {editExpenseParticipants.map((participant) => {
-                    const checked = editExpenseParticipantIds.includes(participant.id);
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-medium md:col-span-2">
+                    Judul pengeluaran
+                    <input
+                      className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                      onChange={(event) => setEditExpenseTitle(event.target.value)}
+                      placeholder="Kopi dan snack review project"
+                      required
+                      value={editExpenseTitle}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-medium">
+                    Nominal
+                    <input
+                      className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                      inputMode="numeric"
+                      onChange={(event) =>
+                        handleEditExpenseAmountChange(event.target.value)
+                      }
+                      placeholder="100.000"
+                      required
+                      value={editExpenseAmount}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-medium">
+                    Tanggal
+                    <input
+                      className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                      onChange={(event) => setEditExpenseDate(event.target.value)}
+                      placeholder="2026-08-18"
+                      required
+                      type="date"
+                      value={editExpenseDate}
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-medium">
+                    Bootcamp
+                    <select
+                      className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                      onChange={(event) =>
+                        handleEditExpenseBootcampChange(event.target.value)
+                      }
+                      required
+                      value={editExpenseBootcampId}
+                    >
+                      <option disabled value="">
+                        Pilih bootcamp transaksi
+                      </option>
+                      {managedBootcamps.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-sm font-medium">
+                    Pembayar
+                    <select
+                      className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+                      onChange={(event) => setEditExpensePayerId(event.target.value)}
+                      required
+                      value={editExpensePayerId}
+                    >
+                      <option disabled value="">
+                        Pilih pembayar
+                      </option>
+                      {editExpenseParticipants.map((participant) => (
+                        <option key={participant.id} value={participant.id}>
+                          {participant.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
-                    return (
+                <div className="mt-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <h4 className="text-sm font-semibold">
+                      Pilih peserta yang menanggung
+                    </h4>
+                    <div className="flex gap-2">
                       <button
-                        className={[
-                          "focus-ring flex items-center justify-between rounded-md border bg-card px-3 py-2.5 text-left text-sm transition active:translate-y-px",
-                          checked
-                            ? "border-primary bg-accent"
-                            : "border-border hover:bg-card/70",
-                        ].join(" ")}
-                        key={participant.id}
-                        onClick={() => toggleEditExpenseParticipant(participant.id)}
+                        className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={
+                          editExpenseParticipants.length === 0 ||
+                          allEditExpenseParticipantsSelected
+                        }
+                        onClick={setAllEditExpenseParticipants}
                         type="button"
                       >
-                        <span>
-                          <span className="block font-semibold">{participant.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {participant.email}
-                          </span>
-                        </span>
-                        <span
-                          className={[
-                            "grid size-5 place-items-center rounded border",
-                            checked
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border bg-card",
-                          ].join(" ")}
-                        >
-                          {checked ? <Check size={14} strokeWidth={2.2} /> : null}
-                        </span>
+                        <Check size={14} strokeWidth={2.2} />
+                        Pilih semua
                       </button>
-                    );
-                  })}
+                      <button
+                        className="focus-ring inline-flex h-9 items-center justify-center rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={editExpenseVisibleCheckedIds.length === 0}
+                        onClick={clearEditExpenseParticipants}
+                        type="button"
+                      >
+                        Kosongkan
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {editExpenseParticipants.map((participant) => {
+                      const checked = editExpenseVisibleCheckedIds.includes(
+                        participant.id,
+                      );
+
+                      return (
+                        <button
+                          className={[
+                            "focus-ring flex items-center justify-between rounded-md border px-3 py-3 text-left transition active:translate-y-px",
+                            checked
+                              ? "border-primary bg-accent"
+                              : "border-border bg-card hover:bg-muted",
+                          ].join(" ")}
+                          key={participant.id}
+                          onClick={() => toggleEditExpenseParticipant(participant.id)}
+                          type="button"
+                        >
+                          <span>
+                            <span className="block text-sm font-semibold">
+                              {participant.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {participant.email}
+                            </span>
+                          </span>
+                          <span
+                            className={[
+                              "grid size-5 place-items-center rounded border",
+                              checked
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-card",
+                            ].join(" ")}
+                          >
+                            {checked ? <Check size={14} strokeWidth={2.2} /> : null}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 md:col-span-2 md:flex-row md:justify-end xl:col-span-5">
-                <button
-                  className="focus-ring inline-flex h-10 items-center justify-center rounded-md border border-border bg-card px-4 text-sm font-semibold text-foreground transition hover:bg-card/70 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
-                  disabled={isSavingExpenseEdit}
-                  onClick={resetExpenseEditForm}
-                  type="button"
-                >
-                  Batal edit transaksi
-                </button>
-                <button
-                  className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
-                  disabled={
-                    isSavingExpenseEdit || editExpenseParticipantIds.length === 0
-                  }
-                  type="submit"
-                >
-                  {isSavingExpenseEdit ? (
-                    <LoaderCircle
-                      className="animate-spin"
-                      size={17}
-                      strokeWidth={1.8}
-                    />
-                  ) : (
-                    <Pencil size={17} strokeWidth={1.8} />
-                  )}
-                  {isSavingExpenseEdit ? "Menyimpan..." : "Simpan perubahan"}
-                </button>
-              </div>
+
+              <ExpenseSplitPreviewPanel
+                cancelLabel="Batal edit transaksi"
+                checkedIds={editExpenseVisibleCheckedIds}
+                isSaving={isSavingExpenseEdit}
+                isSplitTotalValid={isEditExpenseSplitTotalValid}
+                onCancel={resetExpenseEditForm}
+                onShareAmountChange={handleEditExpenseShareAmountChange}
+                participantsById={participantsById}
+                saveIcon="edit"
+                saveLabel="Simpan perubahan"
+                savingLabel="Menyimpan..."
+                shareValues={editExpenseShareValues}
+                splitPreview={editExpenseSplitPreview}
+                splitTotal={editExpenseSplitTotal}
+              />
             </form>
           ) : null}
           <div className="mt-5 overflow-hidden rounded-lg border border-border">

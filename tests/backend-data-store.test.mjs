@@ -353,6 +353,42 @@ describe("backend data store", () => {
     );
   });
 
+  it("updates expenses with custom split amounts", async () => {
+    const state = await getAppState();
+    const bootcampId = "bc-next-08";
+    const participantIds = state.participants
+      .filter((participant) => participant.bootcampIds.includes(bootcampId))
+      .map((participant) => participant.id)
+      .slice(0, 3);
+    const created = await createExpense({
+      title: "Backend edit custom awal",
+      amount: "90.000",
+      bootcampId,
+      expenseDate: "2026-08-25",
+      payerId: participantIds[0],
+      participantIds,
+    });
+    const updated = await updateExpense(created.expense.id, {
+      title: "Backend edit custom final",
+      amount: "150.000",
+      bootcampId,
+      expenseDate: "2026-08-26",
+      payerId: participantIds[1],
+      participantIds,
+      participantShares: [
+        { userId: participantIds[0], shareAmount: "70.000" },
+        { userId: participantIds[1], shareAmount: "50.000" },
+        { userId: participantIds[2], shareAmount: "30.000" },
+      ],
+    });
+
+    assert.deepEqual(updated.expense.participants, [
+      { userId: participantIds[0], shareAmount: 70000 },
+      { userId: participantIds[1], shareAmount: 50000 },
+      { userId: participantIds[2], shareAmount: 30000 },
+    ]);
+  });
+
   it("lets participants update only expenses they created", async () => {
     const state = await getAppState();
     const bootcampId = "bc-next-08";

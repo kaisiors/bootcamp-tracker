@@ -459,15 +459,37 @@ describe("expense participant selection", () => {
       "parseRupiahInput",
       "setAmount(formatRupiahInput(value));",
       "setParticipantEditExpenseAmount(formatRupiahInput(expense.amount));",
-      "setParticipantEditExpenseAmount(formatRupiahInput(event.target.value))",
+      "function handleParticipantEditExpenseAmountChange",
+      "setParticipantEditExpenseAmount(nextAmount);",
       "setEditExpenseAmount(formatRupiahInput(expense.amount));",
-      "setEditExpenseAmount(formatRupiahInput(event.target.value))",
+      "function handleEditExpenseAmountChange",
+      "setEditExpenseAmount(nextAmount);",
       "[participantId]: formatRupiahInput(value)",
     ]) {
       assert.equal(
         trackerApp.includes(formattedNominalRequirement),
         true,
         `${formattedNominalRequirement} should be represented in nominal formatting flow`,
+      );
+    }
+  });
+
+  it("uses the add expense split controls in transaction edit forms", () => {
+    for (const editSplitRequirement of [
+      "ExpenseSplitPreviewPanel",
+      "editExpenseShareValues",
+      "participantEditExpenseShareValues",
+      "setAllEditExpenseParticipants",
+      "setAllParticipantExpenseEditParticipants",
+      "clearEditExpenseParticipants",
+      "clearParticipantExpenseEditParticipants",
+      "participantShares: editExpenseSplitPreview",
+      "participantShares: participantEditSplitPreview",
+    ]) {
+      assert.equal(
+        trackerApp.includes(editSplitRequirement),
+        true,
+        `${editSplitRequirement} should be represented in transaction edit split controls`,
       );
     }
   });
