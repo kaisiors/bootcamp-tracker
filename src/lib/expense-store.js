@@ -1,9 +1,9 @@
-import { splitExpenseEvenly } from "./finance.js";
+import { parseRupiahInput, splitExpenseEvenly } from "./finance.js";
 
 export const expenseStorageKey = "bootcamp-spending-tracker:expenses";
 
 export function createExpenseFromDraft(draft, existingExpenses = []) {
-  const amount = Number(draft.amount);
+  const amount = parseRupiahInput(draft.amount);
   const participantIds = [...new Set(draft.participantIds)].filter(Boolean);
 
   if (!draft.title.trim()) {
@@ -57,7 +57,7 @@ export function resolveExpenseParticipantShares(
 
   for (const share of participantShares) {
     const userId = share?.userId;
-    const shareAmount = Number(share?.shareAmount);
+    const shareAmount = parseRupiahInput(share?.shareAmount);
 
     if (
       !userId ||

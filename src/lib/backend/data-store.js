@@ -6,7 +6,7 @@ import pg from "pg";
 
 import { createBootcampFromDraft } from "../bootcamp-store.js";
 import { createExpenseFromDraft } from "../expense-store.js";
-import { splitExpenseEvenly } from "../finance.js";
+import { parseRupiahInput, splitExpenseEvenly } from "../finance.js";
 import { bootcamps, expenses, notifications, participants } from "../mock-data.js";
 import { createParticipantFromRegistration } from "../participant-store.js";
 
@@ -470,7 +470,7 @@ export async function updateExpense(id, payload, options = {}) {
         .filter((participant) => participant.bootcampIds.includes(nextBootcampId))
         .map((participant) => participant.id),
     );
-    const amount = Number(payload.amount);
+    const amount = parseRupiahInput(payload.amount);
 
     if (!existingExpense) {
       throw createHttpError(404, "Transaksi tidak ditemukan.");

@@ -276,15 +276,15 @@ describe("backend data store", () => {
       .slice(0, 3);
     const expenseResult = await createExpense({
       title: "Backend custom split",
-      amount: "150000",
+      amount: "150.000",
       bootcampId,
       expenseDate: "2026-08-25",
       payerId: participantIds[0],
       participantIds,
       participantShares: [
-        { userId: participantIds[0], shareAmount: "70000" },
-        { userId: participantIds[1], shareAmount: "50000" },
-        { userId: participantIds[2], shareAmount: "30000" },
+        { userId: participantIds[0], shareAmount: "70.000" },
+        { userId: participantIds[1], shareAmount: "50.000" },
+        { userId: participantIds[2], shareAmount: "30.000" },
       ],
     });
 
@@ -323,7 +323,7 @@ describe("backend data store", () => {
     });
     const updated = await updateExpense(created.expense.id, {
       title: "Backend edit final",
-      amount: "150000",
+      amount: "150.000",
       bootcampId,
       expenseDate: "2026-08-26",
       payerId: participantIds[1],
@@ -369,12 +369,12 @@ describe("backend data store", () => {
       participantIds,
     });
     const updated = await updateExpense(
-      created.expense.id,
-      {
-        title: "Peserta edit final",
-        amount: "60000",
-        bootcampId,
-        expenseDate: "2026-08-27",
+        created.expense.id,
+        {
+          title: "Peserta edit final",
+          amount: "60.000",
+          bootcampId,
+          expenseDate: "2026-08-27",
         payerId: participantIds[0],
         participantIds: [participantIds[0]],
       },

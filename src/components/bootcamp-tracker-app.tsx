@@ -61,6 +61,8 @@ import {
   calculateParticipantSummary,
   calculateSettlementRows,
   formatRupiah,
+  formatRupiahInput,
+  parseRupiahInput,
   splitExpenseEvenly,
 } from "../lib/finance.js";
 
@@ -146,7 +148,7 @@ function createEvenExpenseShareValues(
   amount: string,
   participantIds: string[],
 ): ExpenseShareValues {
-  const numericAmount = Number(amount);
+  const numericAmount = parseRupiahInput(amount);
 
   if (
     !Number.isInteger(numericAmount) ||
@@ -159,13 +161,9 @@ function createEvenExpenseShareValues(
   return Object.fromEntries(
     splitExpenseEvenly(numericAmount, participantIds).map((share) => [
       share.userId,
-      String(share.shareAmount),
+      formatRupiahInput(share.shareAmount),
     ]),
   );
-}
-
-function sanitizeAmountInput(value: string) {
-  return value.replace(/\D/g, "");
 }
 
 export function BootcampTrackerApp() {
@@ -451,14 +449,14 @@ export function BootcampTrackerApp() {
   const splitPreview = useMemo(() => {
     return visibleCheckedIds.map((userId) => ({
       userId,
-      shareAmount: Number(expenseShareValues[userId] ?? 0),
+      shareAmount: parseRupiahInput(expenseShareValues[userId]),
     }));
   }, [expenseShareValues, visibleCheckedIds]);
   const splitTotal = splitPreview.reduce(
     (total, share) => total + share.shareAmount,
     0,
   );
-  const numericExpenseAmount = Number(amount);
+  const numericExpenseAmount = parseRupiahInput(amount);
   const isSplitTotalValid =
     Number.isInteger(numericExpenseAmount) &&
     numericExpenseAmount > 0 &&
@@ -532,9 +530,9 @@ export function BootcampTrackerApp() {
   }
 
   function handleExpenseAmountChange(value: string) {
-    const nextAmount = sanitizeAmountInput(value);
+    const nextAmount = formatRupiahInput(value);
 
-    setAmount(nextAmount);
+    setAmount(formatRupiahInput(value));
     setExpenseShareValues(
       createEvenExpenseShareValues(nextAmount, visibleCheckedIds),
     );
@@ -543,7 +541,7 @@ export function BootcampTrackerApp() {
   function handleExpenseShareAmountChange(participantId: string, value: string) {
     setExpenseShareValues((current) => ({
       ...current,
-      [participantId]: sanitizeAmountInput(value),
+      [participantId]: formatRupiahInput(value),
     }));
   }
 
@@ -554,7 +552,7 @@ export function BootcampTrackerApp() {
 
     setParticipantEditingExpenseId(expense.id);
     setParticipantEditExpenseTitle(expense.title);
-    setParticipantEditExpenseAmount(String(expense.amount));
+    setParticipantEditExpenseAmount(formatRupiahInput(expense.amount));
     setParticipantEditExpenseDate(expense.expenseDate);
     setParticipantEditExpenseParticipantIds(
       expense.participants.map((participant) => participant.userId),
@@ -926,7 +924,7 @@ export function BootcampTrackerApp() {
               onSelectAllParticipants={setAllExpenseParticipants}
               onSaveExpense={handleSaveExpense}
               onShareAmountChange={handleExpenseShareAmountChange}
-              setAmount={handleExpenseAmountChange}
+              onAmountChange={handleExpenseAmountChange}
               setExpenseDate={setExpenseDate}
               setTitle={setTitle}
               shareValues={expenseShareValues}
@@ -1556,9 +1554,9 @@ function TransactionsPanel({
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               inputMode="numeric"
               onChange={(event) =>
-                setParticipantEditExpenseAmount(event.target.value)
+                setParticipantEditExpenseAmount(formatRupiahInput(event.target.value))
               }
-              placeholder="100000"
+              placeholder="100.000"
               required
               value={participantEditExpenseAmount}
             />
@@ -1716,9 +1714,9 @@ function AddExpensePanel({
   onSelectAllParticipants,
   onSaveExpense,
   onShareAmountChange,
+  onAmountChange,
   participantsById,
   participants,
-  setAmount,
   setExpenseDate,
   setTitle,
   shareValues,
@@ -1738,9 +1736,9 @@ function AddExpensePanel({
   onSelectAllParticipants: () => void;
   onSaveExpense: () => void;
   onShareAmountChange: (participantId: string, value: string) => void;
+  onAmountChange: (value: string) => void;
   participantsById: Record<string, ParticipantRecord>;
   participants: ParticipantRecord[];
-  setAmount: (value: string) => void;
   setExpenseDate: (value: string) => void;
   setTitle: (value: string) => void;
   shareValues: ExpenseShareValues;
@@ -1771,8 +1769,8 @@ function AddExpensePanel({
             <input
               className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
               inputMode="numeric"
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="100000"
+              onChange={(event) => onAmountChange(event.target.value)}
+              placeholder="100.000"
               value={amount}
             />
           </label>
@@ -2234,7 +2232,7 @@ export function AdminWorkspace() {
   function startEditExpense(expense: ExpenseRecord) {
     setEditingExpenseId(expense.id);
     setEditExpenseTitle(expense.title);
-    setEditExpenseAmount(String(expense.amount));
+    setEditExpenseAmount(formatRupiahInput(expense.amount));
     setEditExpenseBootcampId(expense.bootcampId);
     setEditExpenseDate(expense.expenseDate);
     setEditExpensePayerId(expense.payerId);
@@ -3042,8 +3040,10 @@ export function AdminWorkspace() {
                 <input
                   className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
                   inputMode="numeric"
-                  onChange={(event) => setEditExpenseAmount(event.target.value)}
-                  placeholder="100000"
+                  onChange={(event) =>
+                    setEditExpenseAmount(formatRupiahInput(event.target.value))
+                  }
+                  placeholder="100.000"
                   required
                   value={editExpenseAmount}
                 />

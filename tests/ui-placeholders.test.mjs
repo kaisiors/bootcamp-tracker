@@ -451,4 +451,23 @@ describe("expense participant selection", () => {
       );
     }
   });
+
+  it("auto-formats all expense nominal inputs", () => {
+    for (const formattedNominalRequirement of [
+      "formatRupiahInput",
+      "parseRupiahInput",
+      "setAmount(formatRupiahInput(value));",
+      "setParticipantEditExpenseAmount(formatRupiahInput(expense.amount));",
+      "setParticipantEditExpenseAmount(formatRupiahInput(event.target.value))",
+      "setEditExpenseAmount(formatRupiahInput(expense.amount));",
+      "setEditExpenseAmount(formatRupiahInput(event.target.value))",
+      "[participantId]: formatRupiahInput(value)",
+    ]) {
+      assert.equal(
+        trackerApp.includes(formattedNominalRequirement),
+        true,
+        `${formattedNominalRequirement} should be represented in nominal formatting flow`,
+      );
+    }
+  });
 });

@@ -5,6 +5,8 @@ import {
   buildParticipantSettlementGroups,
   calculateParticipantSummary,
   formatRupiah,
+  formatRupiahInput,
+  parseRupiahInput,
   splitExpenseEvenly,
 } from "../src/lib/finance.js";
 
@@ -287,5 +289,21 @@ describe("buildParticipantSettlementGroups", () => {
 describe("formatRupiah", () => {
   it("formats integer rupiah without decimal digits", () => {
     assert.equal(formatRupiah(1250000), "Rp1.250.000");
+  });
+});
+
+describe("rupiah input helpers", () => {
+  it("formats nominal input while keeping only digits", () => {
+    assert.equal(formatRupiahInput("1000000"), "1.000.000");
+    assert.equal(formatRupiahInput("Rp 2.500.000"), "2.500.000");
+    assert.equal(formatRupiahInput("12abc345"), "12.345");
+    assert.equal(formatRupiahInput(""), "");
+  });
+
+  it("parses formatted nominal input into integer rupiah", () => {
+    assert.equal(parseRupiahInput("1.000.000"), 1000000);
+    assert.equal(parseRupiahInput("Rp 2.500.000"), 2500000);
+    assert.equal(parseRupiahInput("12abc345"), 12345);
+    assert.equal(parseRupiahInput(""), 0);
   });
 });

@@ -146,6 +146,22 @@ export function formatRupiah(value) {
     .replace(/\s/g, "");
 }
 
+export function formatRupiahInput(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+
+  if (!digits) {
+    return "";
+  }
+
+  return new Intl.NumberFormat("id-ID").format(Number(digits));
+}
+
+export function parseRupiahInput(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+
+  return digits ? Number(digits) : 0;
+}
+
 function createSettlementPaymentKey(item) {
   return `${item.expenseId}:${item.debtorId}:${item.payerId}`;
 }

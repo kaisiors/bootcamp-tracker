@@ -40,15 +40,15 @@ describe("expense store helpers", () => {
     const expense = createExpenseFromDraft(
       {
         title: "Konsumsi workshop",
-        amount: "100000",
+        amount: "100.000",
         bootcampId: "bc-ui-09",
         expenseDate: "2026-08-22",
         payerId: "ghoni",
         participantIds: ["ghoni", "maya", "ardi"],
         participantShares: [
-          { userId: "ghoni", shareAmount: "50000" },
-          { userId: "maya", shareAmount: "30000" },
-          { userId: "ardi", shareAmount: "20000" },
+          { userId: "ghoni", shareAmount: "50.000" },
+          { userId: "maya", shareAmount: "30.000" },
+          { userId: "ardi", shareAmount: "20.000" },
         ],
       },
       expenses,
@@ -67,15 +67,15 @@ describe("expense store helpers", () => {
         createExpenseFromDraft(
           {
             title: "Konsumsi workshop",
-            amount: "100000",
+            amount: "100.000",
             bootcampId: "bc-ui-09",
             expenseDate: "2026-08-22",
             payerId: "ghoni",
             participantIds: ["ghoni", "maya", "ardi"],
             participantShares: [
-              { userId: "ghoni", shareAmount: "50000" },
-              { userId: "maya", shareAmount: "30000" },
-              { userId: "ardi", shareAmount: "10000" },
+              { userId: "ghoni", shareAmount: "50.000" },
+              { userId: "maya", shareAmount: "30.000" },
+              { userId: "ardi", shareAmount: "10.000" },
             ],
           },
           expenses,
