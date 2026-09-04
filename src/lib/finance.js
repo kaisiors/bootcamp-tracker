@@ -18,6 +18,77 @@ export function splitExpenseEvenly(amount, checkedParticipantIds) {
   }));
 }
 
+/**
+ * @param {string | number | null | undefined} amountValue
+ * @param {string[]} checkedParticipantIds
+ * @param {Record<string, string | number | null | undefined>} shareValues
+ * @param {string[]} editedParticipantIds
+ * @returns {Record<string, string>}
+ */
+export function balanceExpenseShareValues(
+  amountValue,
+  checkedParticipantIds,
+  shareValues = {},
+  editedParticipantIds = [],
+) {
+  const participantIds = [...new Set(checkedParticipantIds)].filter(Boolean);
+  const participantIdSet = new Set(participantIds);
+  const editedIdSet = new Set(
+    editedParticipantIds.filter((participantId) =>
+      participantIdSet.has(participantId),
+    ),
+  );
+  const amount = parseRupiahInput(amountValue);
+  /** @type {Record<string, string>} */
+  const balancedValues = {};
+  let editedTotal = 0;
+
+  for (const participantId of participantIds) {
+    if (!editedIdSet.has(participantId)) {
+      continue;
+    }
+
+    const value = formatRupiahInput(shareValues[participantId]);
+    balancedValues[participantId] = value;
+    editedTotal += parseRupiahInput(value);
+  }
+
+  const automaticParticipantIds = participantIds.filter(
+    (participantId) => !editedIdSet.has(participantId),
+  );
+
+  if (!Number.isInteger(amount) || amount <= 0) {
+    for (const participantId of automaticParticipantIds) {
+      balancedValues[participantId] = "";
+    }
+
+    return balancedValues;
+  }
+
+  if (automaticParticipantIds.length === 0) {
+    return balancedValues;
+  }
+
+  const remainingAmount = amount - editedTotal;
+
+  if (remainingAmount <= 0) {
+    for (const participantId of automaticParticipantIds) {
+      balancedValues[participantId] = "0";
+    }
+
+    return balancedValues;
+  }
+
+  for (const share of splitExpenseEvenly(
+    remainingAmount,
+    automaticParticipantIds,
+  )) {
+    balancedValues[share.userId] = formatRupiahInput(share.shareAmount);
+  }
+
+  return balancedValues;
+}
+
 export function calculateParticipantSummary(userId, expenses) {
   return expenses.reduce(
     (summary, expense) => {

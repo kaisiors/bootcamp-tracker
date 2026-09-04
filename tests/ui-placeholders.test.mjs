@@ -464,7 +464,7 @@ describe("expense participant selection", () => {
       "setEditExpenseAmount(formatRupiahInput(expense.amount));",
       "function handleEditExpenseAmountChange",
       "setEditExpenseAmount(nextAmount);",
-      "[participantId]: formatRupiahInput(value)",
+      "[participantId]: nextValue",
     ]) {
       assert.equal(
         trackerApp.includes(formattedNominalRequirement),
@@ -490,6 +490,24 @@ describe("expense participant selection", () => {
         trackerApp.includes(editSplitRequirement),
         true,
         `${editSplitRequirement} should be represented in transaction edit split controls`,
+      );
+    }
+  });
+
+  it("auto-balances unedited participant shares across add and edit forms", () => {
+    for (const autoBalanceRequirement of [
+      "balanceExpenseShareValues",
+      "expenseEditedShareIds",
+      "participantEditExpenseEditedShareIds",
+      "editExpenseEditedShareIds",
+      "setExpenseEditedShareIds([]);",
+      "setParticipantEditExpenseEditedShareIds([]);",
+      "setEditExpenseEditedShareIds([]);",
+    ]) {
+      assert.equal(
+        trackerApp.includes(autoBalanceRequirement),
+        true,
+        `${autoBalanceRequirement} should be represented in automatic share balancing`,
       );
     }
   });

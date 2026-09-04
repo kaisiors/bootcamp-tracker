@@ -55,13 +55,13 @@ import {
   participants,
 } from "../lib/mock-data.js";
 import {
+  balanceExpenseShareValues,
   buildParticipantSettlementGroups,
   calculateParticipantSummary,
   calculateSettlementRows,
   formatRupiah,
   formatRupiahInput,
   parseRupiahInput,
-  splitExpenseEvenly,
 } from "../lib/finance.js";
 
 type View =
@@ -139,28 +139,6 @@ const adminNavItems = [
   { id: "expenses", label: "Transaksi", icon: ReceiptText },
 ] satisfies Array<{ id: AdminView; label: string; icon: typeof LayoutDashboard }>;
 
-function createEvenExpenseShareValues(
-  amount: string,
-  participantIds: string[],
-): ExpenseShareValues {
-  const numericAmount = parseRupiahInput(amount);
-
-  if (
-    !Number.isInteger(numericAmount) ||
-    numericAmount <= 0 ||
-    participantIds.length === 0
-  ) {
-    return Object.fromEntries(participantIds.map((id) => [id, ""]));
-  }
-
-  return Object.fromEntries(
-    splitExpenseEvenly(numericAmount, participantIds).map((share) => [
-      share.userId,
-      formatRupiahInput(share.shareAmount),
-    ]),
-  );
-}
-
 function createExpenseShareValuesFromSplits(
   splits: ExpenseRecord["participants"],
 ): ExpenseShareValues {
@@ -200,6 +178,10 @@ export function BootcampTrackerApp() {
   ] = useState<string[]>([]);
   const [participantEditExpenseShareValues, setParticipantEditExpenseShareValues] =
     useState<ExpenseShareValues>({});
+  const [
+    participantEditExpenseEditedShareIds,
+    setParticipantEditExpenseEditedShareIds,
+  ] = useState<string[]>([]);
   const [isSavingParticipantExpenseEdit, setIsSavingParticipantExpenseEdit] =
     useState(false);
   const [paymentTarget, setPaymentTarget] = useState<PaymentTarget | null>(null);
@@ -208,6 +190,7 @@ export function BootcampTrackerApp() {
   const [isLoggingOutParticipant, setIsLoggingOutParticipant] = useState(false);
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
+  const [expenseEditedShareIds, setExpenseEditedShareIds] = useState<string[]>([]);
   const [expenseShareValues, setExpenseShareValues] =
     useState<ExpenseShareValues>({});
 
@@ -521,22 +504,43 @@ export function BootcampTrackerApp() {
     const nextVisibleCheckedIds = nextCheckedIds.filter((id) =>
       visibleParticipantIds.has(id),
     );
+    const nextEditedShareIds = expenseEditedShareIds.filter((id) =>
+      nextVisibleCheckedIds.includes(id),
+    );
 
     setCheckedIds(nextCheckedIds);
+    setExpenseEditedShareIds(nextEditedShareIds);
     setExpenseShareValues(
-      createEvenExpenseShareValues(amount, nextVisibleCheckedIds),
+      balanceExpenseShareValues(
+        amount,
+        nextVisibleCheckedIds,
+        expenseShareValues,
+        nextEditedShareIds,
+      ),
     );
   }
 
   function setAllExpenseParticipants() {
     const participantIds = bootcampParticipants.map((participant) => participant.id);
+    const nextEditedShareIds = expenseEditedShareIds.filter((id) =>
+      participantIds.includes(id),
+    );
 
     setCheckedIds(participantIds);
-    setExpenseShareValues(createEvenExpenseShareValues(amount, participantIds));
+    setExpenseEditedShareIds(nextEditedShareIds);
+    setExpenseShareValues(
+      balanceExpenseShareValues(
+        amount,
+        participantIds,
+        expenseShareValues,
+        nextEditedShareIds,
+      ),
+    );
   }
 
   function clearExpenseParticipants() {
     setCheckedIds([]);
+    setExpenseEditedShareIds([]);
     setExpenseShareValues({});
   }
 
@@ -545,15 +549,34 @@ export function BootcampTrackerApp() {
 
     setAmount(formatRupiahInput(value));
     setExpenseShareValues(
-      createEvenExpenseShareValues(nextAmount, visibleCheckedIds),
+      balanceExpenseShareValues(
+        nextAmount,
+        visibleCheckedIds,
+        expenseShareValues,
+        expenseEditedShareIds,
+      ),
     );
   }
 
   function handleExpenseShareAmountChange(participantId: string, value: string) {
-    setExpenseShareValues((current) => ({
-      ...current,
-      [participantId]: formatRupiahInput(value),
-    }));
+    const nextValue = formatRupiahInput(value);
+    const nextEditedShareIds = nextValue
+      ? [...new Set([...expenseEditedShareIds, participantId])]
+      : expenseEditedShareIds.filter((id) => id !== participantId);
+    const nextShareValues = {
+      ...expenseShareValues,
+      [participantId]: nextValue,
+    };
+
+    setExpenseEditedShareIds(nextEditedShareIds);
+    setExpenseShareValues(
+      balanceExpenseShareValues(
+        amount,
+        visibleCheckedIds,
+        nextShareValues,
+        nextEditedShareIds,
+      ),
+    );
   }
 
   function startParticipantExpenseEdit(expense: ExpenseRecord) {
@@ -571,6 +594,7 @@ export function BootcampTrackerApp() {
     setParticipantEditExpenseShareValues(
       createExpenseShareValuesFromSplits(expense.participants),
     );
+    setParticipantEditExpenseEditedShareIds([]);
     setExpenseFormMessage("");
   }
 
@@ -581,6 +605,7 @@ export function BootcampTrackerApp() {
     setParticipantEditExpenseDate("");
     setParticipantEditExpenseParticipantIds([]);
     setParticipantEditExpenseShareValues({});
+    setParticipantEditExpenseEditedShareIds([]);
   }
 
   function toggleParticipantExpenseEditParticipant(participantId: string) {
@@ -595,28 +620,44 @@ export function BootcampTrackerApp() {
     const nextVisibleParticipantIds = nextParticipantIds.filter((id) =>
       visibleParticipantIds.has(id),
     );
+    const nextEditedShareIds = participantEditExpenseEditedShareIds.filter((id) =>
+      nextVisibleParticipantIds.includes(id),
+    );
 
     setParticipantEditExpenseParticipantIds(nextParticipantIds);
+    setParticipantEditExpenseEditedShareIds(nextEditedShareIds);
     setParticipantEditExpenseShareValues(
-      createEvenExpenseShareValues(
+      balanceExpenseShareValues(
         participantEditExpenseAmount,
         nextVisibleParticipantIds,
+        participantEditExpenseShareValues,
+        nextEditedShareIds,
       ),
     );
   }
 
   function setAllParticipantExpenseEditParticipants() {
     const participantIds = bootcampParticipants.map((participant) => participant.id);
+    const nextEditedShareIds = participantEditExpenseEditedShareIds.filter((id) =>
+      participantIds.includes(id),
+    );
 
     setParticipantEditExpenseParticipantIds(participantIds);
+    setParticipantEditExpenseEditedShareIds(nextEditedShareIds);
     setParticipantEditExpenseShareValues(
-      createEvenExpenseShareValues(participantEditExpenseAmount, participantIds),
+      balanceExpenseShareValues(
+        participantEditExpenseAmount,
+        participantIds,
+        participantEditExpenseShareValues,
+        nextEditedShareIds,
+      ),
     );
   }
 
   function clearParticipantExpenseEditParticipants() {
     setParticipantEditExpenseParticipantIds([]);
     setParticipantEditExpenseShareValues({});
+    setParticipantEditExpenseEditedShareIds([]);
   }
 
   function handleParticipantEditExpenseAmountChange(value: string) {
@@ -624,7 +665,12 @@ export function BootcampTrackerApp() {
 
     setParticipantEditExpenseAmount(nextAmount);
     setParticipantEditExpenseShareValues(
-      createEvenExpenseShareValues(nextAmount, participantEditVisibleCheckedIds),
+      balanceExpenseShareValues(
+        nextAmount,
+        participantEditVisibleCheckedIds,
+        participantEditExpenseShareValues,
+        participantEditExpenseEditedShareIds,
+      ),
     );
   }
 
@@ -632,10 +678,24 @@ export function BootcampTrackerApp() {
     participantId: string,
     value: string,
   ) {
-    setParticipantEditExpenseShareValues((current) => ({
-      ...current,
-      [participantId]: formatRupiahInput(value),
-    }));
+    const nextValue = formatRupiahInput(value);
+    const nextEditedShareIds = nextValue
+      ? [...new Set([...participantEditExpenseEditedShareIds, participantId])]
+      : participantEditExpenseEditedShareIds.filter((id) => id !== participantId);
+    const nextShareValues = {
+      ...participantEditExpenseShareValues,
+      [participantId]: nextValue,
+    };
+
+    setParticipantEditExpenseEditedShareIds(nextEditedShareIds);
+    setParticipantEditExpenseShareValues(
+      balanceExpenseShareValues(
+        participantEditExpenseAmount,
+        participantEditVisibleCheckedIds,
+        nextShareValues,
+        nextEditedShareIds,
+      ),
+    );
   }
 
   async function handleSubmitParticipantExpenseEdit(
@@ -824,6 +884,7 @@ export function BootcampTrackerApp() {
       setAmount("");
       setExpenseDate("");
       setCheckedIds([]);
+      setExpenseEditedShareIds([]);
       setExpenseShareValues({});
       setExpenseFormMessage("Pengeluaran tersimpan dan langsung masuk rekap.");
       setActiveView("transactions");
@@ -2193,6 +2254,9 @@ export function AdminWorkspace() {
   >([]);
   const [editExpenseShareValues, setEditExpenseShareValues] =
     useState<ExpenseShareValues>({});
+  const [editExpenseEditedShareIds, setEditExpenseEditedShareIds] = useState<
+    string[]
+  >([]);
   const [adminMessage, setAdminMessage] = useState("");
   const [isSavingBootcamp, setIsSavingBootcamp] = useState(false);
   const [isCreatingParticipant, setIsCreatingParticipant] = useState(false);
@@ -2428,6 +2492,7 @@ export function AdminWorkspace() {
       expense.participants.map((participant) => participant.userId),
     );
     setEditExpenseShareValues(createExpenseShareValuesFromSplits(expense.participants));
+    setEditExpenseEditedShareIds([]);
     setActiveAdminView("expenses");
     setAdminMessage("");
   }
@@ -2441,6 +2506,7 @@ export function AdminWorkspace() {
     setEditExpensePayerId("");
     setEditExpenseParticipantIds([]);
     setEditExpenseShareValues({});
+    setEditExpenseEditedShareIds([]);
   }
 
   function handleEditExpenseBootcampChange(bootcampId: string) {
@@ -2448,6 +2514,7 @@ export function AdminWorkspace() {
     setEditExpensePayerId("");
     setEditExpenseParticipantIds([]);
     setEditExpenseShareValues({});
+    setEditExpenseEditedShareIds([]);
   }
 
   function toggleEditExpenseParticipant(participantId: string) {
@@ -2460,25 +2527,44 @@ export function AdminWorkspace() {
     const nextVisibleParticipantIds = nextParticipantIds.filter((id) =>
       visibleParticipantIds.has(id),
     );
+    const nextEditedShareIds = editExpenseEditedShareIds.filter((id) =>
+      nextVisibleParticipantIds.includes(id),
+    );
 
     setEditExpenseParticipantIds(nextParticipantIds);
+    setEditExpenseEditedShareIds(nextEditedShareIds);
     setEditExpenseShareValues(
-      createEvenExpenseShareValues(editExpenseAmount, nextVisibleParticipantIds),
+      balanceExpenseShareValues(
+        editExpenseAmount,
+        nextVisibleParticipantIds,
+        editExpenseShareValues,
+        nextEditedShareIds,
+      ),
     );
   }
 
   function setAllEditExpenseParticipants() {
     const participantIds = editExpenseParticipants.map((participant) => participant.id);
+    const nextEditedShareIds = editExpenseEditedShareIds.filter((id) =>
+      participantIds.includes(id),
+    );
 
     setEditExpenseParticipantIds(participantIds);
+    setEditExpenseEditedShareIds(nextEditedShareIds);
     setEditExpenseShareValues(
-      createEvenExpenseShareValues(editExpenseAmount, participantIds),
+      balanceExpenseShareValues(
+        editExpenseAmount,
+        participantIds,
+        editExpenseShareValues,
+        nextEditedShareIds,
+      ),
     );
   }
 
   function clearEditExpenseParticipants() {
     setEditExpenseParticipantIds([]);
     setEditExpenseShareValues({});
+    setEditExpenseEditedShareIds([]);
   }
 
   function handleEditExpenseAmountChange(value: string) {
@@ -2486,15 +2572,34 @@ export function AdminWorkspace() {
 
     setEditExpenseAmount(nextAmount);
     setEditExpenseShareValues(
-      createEvenExpenseShareValues(nextAmount, editExpenseVisibleCheckedIds),
+      balanceExpenseShareValues(
+        nextAmount,
+        editExpenseVisibleCheckedIds,
+        editExpenseShareValues,
+        editExpenseEditedShareIds,
+      ),
     );
   }
 
   function handleEditExpenseShareAmountChange(participantId: string, value: string) {
-    setEditExpenseShareValues((current) => ({
-      ...current,
-      [participantId]: formatRupiahInput(value),
-    }));
+    const nextValue = formatRupiahInput(value);
+    const nextEditedShareIds = nextValue
+      ? [...new Set([...editExpenseEditedShareIds, participantId])]
+      : editExpenseEditedShareIds.filter((id) => id !== participantId);
+    const nextShareValues = {
+      ...editExpenseShareValues,
+      [participantId]: nextValue,
+    };
+
+    setEditExpenseEditedShareIds(nextEditedShareIds);
+    setEditExpenseShareValues(
+      balanceExpenseShareValues(
+        editExpenseAmount,
+        editExpenseVisibleCheckedIds,
+        nextShareValues,
+        nextEditedShareIds,
+      ),
+    );
   }
 
   async function handleSubmitExpenseEdit(event: React.FormEvent<HTMLFormElement>) {

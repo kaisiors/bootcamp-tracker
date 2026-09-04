@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  balanceExpenseShareValues,
   buildParticipantSettlementGroups,
   calculateParticipantSummary,
   formatRupiah,
@@ -39,6 +40,63 @@ describe("splitExpenseEvenly", () => {
       { userId: "nala", shareAmount: 33333 },
       { userId: "raka", shareAmount: 33333 },
     ]);
+  });
+});
+
+describe("balanceExpenseShareValues", () => {
+  it("keeps edited participant amounts and splits the remaining amount", () => {
+    const values = balanceExpenseShareValues(
+      "100.000",
+      ["bima", "nala", "raka"],
+      {
+        bima: "50.000",
+        nala: "33.333",
+        raka: "33.333",
+      },
+      ["bima"],
+    );
+
+    assert.deepEqual(values, {
+      bima: "50.000",
+      nala: "25.000",
+      raka: "25.000",
+    });
+  });
+
+  it("distributes leftover rupiah only to unedited participants", () => {
+    const values = balanceExpenseShareValues(
+      "100.000",
+      ["bima", "nala", "raka"],
+      {
+        bima: "40.000",
+        nala: "30.000",
+        raka: "30.000",
+      },
+      ["bima"],
+    );
+
+    assert.deepEqual(values, {
+      bima: "40.000",
+      nala: "30.000",
+      raka: "30.000",
+    });
+  });
+
+  it("leaves a mismatched total when every selected participant is edited", () => {
+    const values = balanceExpenseShareValues(
+      "100.000",
+      ["bima", "nala"],
+      {
+        bima: "60.000",
+        nala: "30.000",
+      },
+      ["bima", "nala"],
+    );
+
+    assert.deepEqual(values, {
+      bima: "60.000",
+      nala: "30.000",
+    });
   });
 });
 
