@@ -172,6 +172,29 @@ describe("admin expense editing", () => {
   });
 });
 
+describe("admin payment monitoring", () => {
+  it("shows a per-bootcamp payment monitoring menu and summary", () => {
+    for (const paymentMonitoringRequirement of [
+      '"payments"',
+      'label: "Pembayaran"',
+      "allSettlementPayments",
+      "buildBootcampPaymentSummaries",
+      "Monitoring pembayaran",
+      "Sudah dibayar",
+      "Belum dibayar",
+      "paymentPercentage",
+      "Lunas",
+      "Sebagian",
+    ]) {
+      assert.equal(
+        trackerApp.includes(paymentMonitoringRequirement),
+        true,
+        `${paymentMonitoringRequirement} should be represented in admin payment monitoring`,
+      );
+    }
+  });
+});
+
 describe("participant expense editing", () => {
   it("shows edit controls only for transactions created by the active participant", () => {
     for (const participantEditRequirement of [

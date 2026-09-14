@@ -57,6 +57,7 @@ import {
 import { formatDate, formatDeadline } from "../lib/date-format.js";
 import {
   balanceExpenseShareValues,
+  buildBootcampPaymentSummaries,
   buildParticipantSettlementGroups,
   calculateParticipantSummary,
   calculateSettlementRows,
@@ -114,6 +115,7 @@ type AdminView =
   | "bootcamps"
   | "participants"
   | "bankAccounts"
+  | "payments"
   | "expenses";
 type DeleteConfirmation = {
   kind: "bootcamp" | "participant" | "expense";
@@ -137,6 +139,7 @@ const adminNavItems = [
   { id: "bootcamps", label: "Bootcamp", icon: ClipboardList },
   { id: "participants", label: "Peserta", icon: Users },
   { id: "bankAccounts", label: "Rekening", icon: CreditCard },
+  { id: "payments", label: "Pembayaran", icon: CircleDollarSign },
   { id: "expenses", label: "Transaksi", icon: ReceiptText },
 ] satisfies Array<{ id: AdminView; label: string; icon: typeof LayoutDashboard }>;
 
@@ -2225,6 +2228,9 @@ export function AdminWorkspace() {
   const [managedBootcamps, setManagedBootcamps] = useState<BootcampRecord[]>([]);
   const [allParticipants, setAllParticipants] = useState<ParticipantRecord[]>([]);
   const [allExpenses, setAllExpenses] = useState<ExpenseRecord[]>([]);
+  const [allSettlementPayments, setAllSettlementPayments] = useState<
+    SettlementPaymentRecord[]
+  >([]);
   const [newBootcampName, setNewBootcampName] = useState("");
   const [newBootcampLocation, setNewBootcampLocation] = useState("");
   const [newBootcampStartDate, setNewBootcampStartDate] = useState("");
@@ -2286,6 +2292,7 @@ export function AdminWorkspace() {
         setManagedBootcamps(state.bootcamps);
         setAllParticipants(state.participants);
         setAllExpenses(state.expenses);
+        setAllSettlementPayments(state.settlementPayments ?? []);
         setNewParticipantBootcampId((current) =>
           state.bootcamps.some((item: BootcampRecord) => item.id === current)
             ? current
@@ -2351,6 +2358,15 @@ export function AdminWorkspace() {
   const totalExpenseAmount = allExpenses.reduce(
     (total, expense) => total + expense.amount,
     0,
+  );
+  const paymentSummaries = useMemo(
+    () =>
+      buildBootcampPaymentSummaries(
+        managedBootcamps,
+        allExpenses,
+        allSettlementPayments,
+      ),
+    [allExpenses, allSettlementPayments, managedBootcamps],
   );
   const createdBootcamp = createdBootcampId
     ? managedBootcamps.find((item) => item.id === createdBootcampId)
@@ -2426,6 +2442,7 @@ export function AdminWorkspace() {
         setManagedBootcamps(result.state.bootcamps);
         setAllParticipants(result.state.participants);
         setAllExpenses(result.state.expenses);
+        setAllSettlementPayments(result.state.settlementPayments ?? []);
         setEditingBootcampId(null);
         setAdminMessage("Perubahan bootcamp tersimpan.");
       } else {
@@ -2441,6 +2458,7 @@ export function AdminWorkspace() {
         setManagedBootcamps(result.state.bootcamps);
         setAllParticipants(result.state.participants);
         setAllExpenses(result.state.expenses);
+        setAllSettlementPayments(result.state.settlementPayments ?? []);
         saveSelectedBootcampId(result.bootcamp.id);
         setCreatedBootcampId(result.bootcamp.id);
         setNewParticipantBootcampId(result.bootcamp.id);
@@ -2647,6 +2665,7 @@ export function AdminWorkspace() {
       setManagedBootcamps(result.state.bootcamps);
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
+      setAllSettlementPayments(result.state.settlementPayments ?? []);
       resetExpenseEditForm();
       setAdminMessage("Perubahan transaksi tersimpan.");
     } catch (error) {
@@ -2705,6 +2724,7 @@ export function AdminWorkspace() {
       setManagedBootcamps(state.bootcamps);
       setAllParticipants(state.participants);
       setAllExpenses(state.expenses);
+      setAllSettlementPayments(state.settlementPayments ?? []);
       setAdminMessage("Bootcamp dihapus dari daftar admin dan pilihan peserta.");
     } catch (error) {
       setAdminMessage(
@@ -2738,6 +2758,7 @@ export function AdminWorkspace() {
       setManagedBootcamps(result.state.bootcamps);
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
+      setAllSettlementPayments(result.state.settlementPayments ?? []);
       setNewParticipantName("");
       setNewParticipantEmail("");
       setNewParticipantPhone("");
@@ -2768,6 +2789,7 @@ export function AdminWorkspace() {
       setManagedBootcamps(state.bootcamps);
       setAllParticipants(state.participants);
       setAllExpenses(state.expenses);
+      setAllSettlementPayments(state.settlementPayments ?? []);
       setAdminMessage("Peserta dihapus dari daftar dan transaksi terkait diperbarui.");
     } catch (error) {
       setAdminMessage(
@@ -2791,6 +2813,7 @@ export function AdminWorkspace() {
       setManagedBootcamps(state.bootcamps);
       setAllParticipants(state.participants);
       setAllExpenses(state.expenses);
+      setAllSettlementPayments(state.settlementPayments ?? []);
       setAdminMessage("Transaksi dihapus dari rekap.");
     } catch (error) {
       setAdminMessage(
@@ -2818,7 +2841,7 @@ export function AdminWorkspace() {
           </p>
         </div>
         <div className="grid gap-3">
-          <nav className="grid gap-2 sm:grid-cols-2 md:grid-cols-5">
+          <nav className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
             {adminNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeAdminView === item.id;
@@ -2891,10 +2914,100 @@ export function AdminWorkspace() {
           <div className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
             <h2 className="text-xl font-semibold">Navigasi data admin</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Gunakan menu Bootcamp, Peserta, Rekening, dan Transaksi untuk
-              membuka setiap daftar secara terpisah.
+              Gunakan menu Bootcamp, Peserta, Rekening, Pembayaran, dan Transaksi
+              untuk membuka setiap data secara terpisah.
             </p>
           </div>
+        </section>
+      ) : null}
+
+      {activeAdminView === "payments" ? (
+        <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+          <div>
+            <h2 className="text-xl font-semibold">Monitoring pembayaran</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pantau total kewajiban peserta dan progres pembayaran di setiap bootcamp.
+            </p>
+          </div>
+
+          {paymentSummaries.length === 0 ? (
+            <div className="mt-5 rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              Belum ada bootcamp untuk dimonitor.
+            </div>
+          ) : (
+            <div className="mt-5 overflow-hidden rounded-lg border border-border">
+              <table className="w-full min-w-[920px] border-collapse bg-card text-sm">
+                <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Bootcamp</th>
+                    <th className="px-4 py-3 text-right">Total tagihan</th>
+                    <th className="px-4 py-3 text-right">Sudah dibayar</th>
+                    <th className="px-4 py-3 text-right">Belum dibayar</th>
+                    <th className="px-4 py-3">Progress</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {paymentSummaries.map((summary) => {
+                    const statusLabel =
+                      summary.status === "paid"
+                        ? "Lunas"
+                        : summary.status === "partial"
+                          ? "Sebagian"
+                          : summary.status === "unpaid"
+                            ? "Belum dibayar"
+                            : "Belum ada tagihan";
+                    const statusClass =
+                      summary.status === "paid"
+                        ? "bg-accent text-accent-foreground"
+                        : summary.status === "partial"
+                          ? "bg-muted text-foreground"
+                          : summary.status === "unpaid"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-muted text-muted-foreground";
+
+                    return (
+                      <tr key={summary.bootcampId}>
+                        <td className="px-4 py-4 font-medium">{summary.bootcampName}</td>
+                        <td className="px-4 py-4 text-right font-semibold">
+                          {formatRupiah(summary.totalAmount)}
+                        </td>
+                        <td className="px-4 py-4 text-right text-accent-foreground">
+                          {formatRupiah(summary.paidAmount)}
+                        </td>
+                        <td className="px-4 py-4 text-right text-destructive">
+                          {formatRupiah(summary.unpaidAmount)}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="min-w-36">
+                            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                              <span>
+                                {summary.paidItems}/{summary.totalItems} tagihan
+                              </span>
+                              <span className="font-semibold text-foreground">
+                                {summary.paymentPercentage}%
+                              </span>
+                            </div>
+                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full bg-primary transition-[width]"
+                                style={{ width: `${summary.paymentPercentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`rounded-md px-2 py-1 text-xs font-semibold ${statusClass}`}>
+                            {statusLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       ) : null}
 

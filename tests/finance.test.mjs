@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   balanceExpenseShareValues,
+  buildBootcampPaymentSummaries,
   buildParticipantSettlementGroups,
   calculateParticipantSummary,
   formatRupiah,
@@ -339,6 +340,87 @@ describe("buildParticipantSettlementGroups", () => {
         participantName: "Dewi Anggraini",
         totalAmount: 20000,
         unpaidAmount: 20000,
+      },
+    ]);
+  });
+});
+
+describe("buildBootcampPaymentSummaries", () => {
+  it("aggregates paid and unpaid obligations for each bootcamp", () => {
+    const summaries = buildBootcampPaymentSummaries(
+      [
+        { id: "bc-next-08", name: "Next.js Batch 08" },
+        { id: "bc-ui-09", name: "UI Engineering Batch 09" },
+        { id: "bc-empty", name: "Empty Batch" },
+      ],
+      [
+        {
+          bootcampId: "bc-next-08",
+          id: "expense-1",
+          payerId: "nala",
+          participants: [
+            { shareAmount: 25000, userId: "bima" },
+            { shareAmount: 75000, userId: "nala" },
+          ],
+        },
+        {
+          bootcampId: "bc-next-08",
+          id: "expense-2",
+          payerId: "raka",
+          participants: [
+            { shareAmount: 30000, userId: "bima" },
+            { shareAmount: 30000, userId: "raka" },
+          ],
+        },
+        {
+          bootcampId: "bc-ui-09",
+          id: "expense-3",
+          payerId: "bima",
+          participants: [
+            { shareAmount: 20000, userId: "bima" },
+            { shareAmount: 40000, userId: "dewi" },
+          ],
+        },
+      ],
+      [{ debtorId: "bima", expenseId: "expense-1", payerId: "nala" }],
+    );
+
+    assert.deepEqual(summaries, [
+      {
+        bootcampId: "bc-next-08",
+        bootcampName: "Next.js Batch 08",
+        paidAmount: 25000,
+        paidItems: 1,
+        paymentPercentage: 45,
+        status: "partial",
+        totalAmount: 55000,
+        totalItems: 2,
+        unpaidAmount: 30000,
+        unpaidItems: 1,
+      },
+      {
+        bootcampId: "bc-ui-09",
+        bootcampName: "UI Engineering Batch 09",
+        paidAmount: 0,
+        paidItems: 0,
+        paymentPercentage: 0,
+        status: "unpaid",
+        totalAmount: 40000,
+        totalItems: 1,
+        unpaidAmount: 40000,
+        unpaidItems: 1,
+      },
+      {
+        bootcampId: "bc-empty",
+        bootcampName: "Empty Batch",
+        paidAmount: 0,
+        paidItems: 0,
+        paymentPercentage: 0,
+        status: "empty",
+        totalAmount: 0,
+        totalItems: 0,
+        unpaidAmount: 0,
+        unpaidItems: 0,
       },
     ]);
   });

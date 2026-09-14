@@ -207,6 +207,99 @@ export function buildParticipantSettlementGroups(
   return [...groupsByParticipant.values()];
 }
 
+/**
+ * @param {Array<{id: string, name: string}>} bootcamps
+ * @param {Array<{bootcampId: string, id: string, payerId: string, participants?: Array<{userId: string, shareAmount: number}>}>} expenses
+ * @param {Array<{debtorId: string, expenseId: string, payerId: string}>} settlementPayments
+ * @returns {Array<{
+ *   bootcampId: string,
+ *   bootcampName: string,
+ *   paidAmount: number,
+ *   paidItems: number,
+ *   paymentPercentage: number,
+ *   status: "empty" | "paid" | "partial" | "unpaid",
+ *   totalAmount: number,
+ *   totalItems: number,
+ *   unpaidAmount: number,
+ *   unpaidItems: number
+ * }>}
+ */
+export function buildBootcampPaymentSummaries(
+  bootcamps,
+  expenses,
+  settlementPayments = [],
+) {
+  const paidSettlementKeys = new Set(
+    settlementPayments.map((payment) => createSettlementPaymentKey(payment)),
+  );
+
+  return bootcamps.map((bootcamp) => {
+    let paidAmount = 0;
+    let paidItems = 0;
+    let totalAmount = 0;
+    let totalItems = 0;
+
+    for (const expense of expenses) {
+      if (expense.bootcampId !== bootcamp.id) {
+        continue;
+      }
+
+      for (const participant of expense.participants ?? []) {
+        if (participant.userId === expense.payerId) {
+          continue;
+        }
+
+        const amount = Number(participant.shareAmount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          continue;
+        }
+
+        totalAmount += amount;
+        totalItems += 1;
+
+        if (
+          paidSettlementKeys.has(
+            createSettlementPaymentKey({
+              debtorId: participant.userId,
+              expenseId: expense.id,
+              payerId: expense.payerId,
+            }),
+          )
+        ) {
+          paidAmount += amount;
+          paidItems += 1;
+        }
+      }
+    }
+
+    const unpaidAmount = totalAmount - paidAmount;
+    const unpaidItems = totalItems - paidItems;
+    const status =
+      totalAmount === 0
+        ? "empty"
+        : unpaidAmount === 0
+          ? "paid"
+          : paidAmount === 0
+            ? "unpaid"
+            : "partial";
+
+    return {
+      bootcampId: bootcamp.id,
+      bootcampName: bootcamp.name,
+      paidAmount,
+      paidItems,
+      paymentPercentage:
+        totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0,
+      status,
+      totalAmount,
+      totalItems,
+      unpaidAmount,
+      unpaidItems,
+    };
+  });
+}
+
 export function formatRupiah(value) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
