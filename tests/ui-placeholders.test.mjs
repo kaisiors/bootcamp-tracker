@@ -342,6 +342,21 @@ describe("admin session controls", () => {
   });
 });
 
+describe("admin login navigation", () => {
+  it("provides a link to the participant login page", () => {
+    for (const participantLoginRequirement of [
+      'href="/"',
+      "Login peserta",
+    ]) {
+      assert.equal(
+        authPages.includes(participantLoginRequirement),
+        true,
+        `${participantLoginRequirement} should be represented on the admin login page`,
+      );
+    }
+  });
+});
+
 describe("blocking process loading overlays", () => {
   it("defines a full-page loading overlay component", () => {
     for (const overlayRequirement of [

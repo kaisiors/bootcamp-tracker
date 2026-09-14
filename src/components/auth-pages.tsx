@@ -496,6 +496,17 @@ export function AdminLoginPage() {
           <ArrowRight size={17} strokeWidth={1.8} />
         </button>
       </form>
+
+      <Link
+        className={cn(
+          buttonVariants({ variant: "outline", size: "lg" }),
+          "mt-6 h-10 w-full gap-2",
+        )}
+        href="/"
+      >
+        <ArrowRight size={17} strokeWidth={1.8} />
+        Login peserta
+      </Link>
     </AuthShell>
   );
 }
