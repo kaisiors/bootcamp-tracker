@@ -57,6 +57,7 @@ import {
 import { formatDate, formatDeadline } from "../lib/date-format.js";
 import {
   balanceExpenseShareValues,
+  buildBootcampPaymentDetailRows,
   buildBootcampPaymentSummaries,
   buildParticipantSettlementGroups,
   calculateParticipantSummary,
@@ -92,6 +93,17 @@ type SettlementPaymentItem = {
   expenseId: string;
   paidAt: string | null;
   payerId: string;
+  status: "paid" | "unpaid";
+  title: string;
+};
+type AdminPaymentDetailRow = {
+  amount: number;
+  debtorId: string;
+  debtorName: string;
+  expenseId: string;
+  paidAt: string | null;
+  payerId: string;
+  payerName: string;
   status: "paid" | "unpaid";
   title: string;
 };
@@ -2231,6 +2243,9 @@ export function AdminWorkspace() {
   const [allSettlementPayments, setAllSettlementPayments] = useState<
     SettlementPaymentRecord[]
   >([]);
+  const [selectedPaymentBootcampId, setSelectedPaymentBootcampId] = useState<
+    string | null
+  >(null);
   const [newBootcampName, setNewBootcampName] = useState("");
   const [newBootcampLocation, setNewBootcampLocation] = useState("");
   const [newBootcampStartDate, setNewBootcampStartDate] = useState("");
@@ -2367,6 +2382,26 @@ export function AdminWorkspace() {
         allSettlementPayments,
       ),
     [allExpenses, allSettlementPayments, managedBootcamps],
+  );
+  const selectedPaymentBootcamp = selectedPaymentBootcampId
+    ? managedBootcamps.find((item) => item.id === selectedPaymentBootcampId) ?? null
+    : null;
+  const paymentDetailRows: AdminPaymentDetailRow[] = useMemo(
+    () =>
+      selectedPaymentBootcampId
+        ? buildBootcampPaymentDetailRows(
+            selectedPaymentBootcampId,
+            allExpenses,
+            participantsById,
+            allSettlementPayments,
+          )
+        : [],
+    [
+      allExpenses,
+      allSettlementPayments,
+      participantsById,
+      selectedPaymentBootcampId,
+    ],
   );
   const createdBootcamp = createdBootcampId
     ? managedBootcamps.find((item) => item.id === createdBootcampId)
@@ -2855,7 +2890,12 @@ export function AdminWorkspace() {
                       : "bg-muted text-muted-foreground hover:text-foreground",
                   ].join(" ")}
                   key={item.id}
-                  onClick={() => setActiveAdminView(item.id)}
+                  onClick={() => {
+                    setActiveAdminView(item.id);
+                    if (item.id === "payments") {
+                      setSelectedPaymentBootcampId(null);
+                    }
+                  }}
                   type="button"
                 >
                   <Icon size={17} strokeWidth={1.8} />
@@ -2923,90 +2963,184 @@ export function AdminWorkspace() {
 
       {activeAdminView === "payments" ? (
         <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
-          <div>
-            <h2 className="text-xl font-semibold">Monitoring pembayaran</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Pantau total kewajiban peserta dan progres pembayaran di setiap bootcamp.
-            </p>
-          </div>
+          {selectedPaymentBootcamp ? (
+            <>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <button
+                    aria-label="Kembali ke ringkasan pembayaran"
+                    className="focus-ring inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
+                    onClick={() => setSelectedPaymentBootcampId(null)}
+                    title="Kembali ke ringkasan"
+                    type="button"
+                  >
+                    <ChevronRight className="rotate-180" size={17} strokeWidth={1.8} />
+                    Kembali ke ringkasan
+                  </button>
+                  <h2 className="mt-4 text-xl font-semibold">
+                    Detail pembayaran {selectedPaymentBootcamp.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Lihat siapa yang belum bayar atau sudah bayar kepada peserta lain.
+                  </p>
+                </div>
+                <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">Total kewajiban </span>
+                  <span className="font-semibold">
+                    {formatRupiah(
+                      paymentDetailRows.reduce((total, row) => total + row.amount, 0),
+                    )}
+                  </span>
+                </div>
+              </div>
 
-          {paymentSummaries.length === 0 ? (
-            <div className="mt-5 rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              Belum ada bootcamp untuk dimonitor.
-            </div>
-          ) : (
-            <div className="mt-5 overflow-hidden rounded-lg border border-border">
-              <table className="w-full min-w-[920px] border-collapse bg-card text-sm">
-                <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3">Bootcamp</th>
-                    <th className="px-4 py-3 text-right">Total tagihan</th>
-                    <th className="px-4 py-3 text-right">Sudah dibayar</th>
-                    <th className="px-4 py-3 text-right">Belum dibayar</th>
-                    <th className="px-4 py-3">Progress</th>
-                    <th className="px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paymentSummaries.map((summary) => {
-                    const statusLabel =
-                      summary.status === "paid"
-                        ? "Lunas"
-                        : summary.status === "partial"
-                          ? "Sebagian"
-                          : summary.status === "unpaid"
-                            ? "Belum dibayar"
-                            : "Belum ada tagihan";
-                    const statusClass =
-                      summary.status === "paid"
-                        ? "bg-accent text-accent-foreground"
-                        : summary.status === "partial"
-                          ? "bg-muted text-foreground"
-                          : summary.status === "unpaid"
-                            ? "bg-destructive/10 text-destructive"
-                            : "bg-muted text-muted-foreground";
-
-                    return (
-                      <tr key={summary.bootcampId}>
-                        <td className="px-4 py-4 font-medium">{summary.bootcampName}</td>
-                        <td className="px-4 py-4 text-right font-semibold">
-                          {formatRupiah(summary.totalAmount)}
-                        </td>
-                        <td className="px-4 py-4 text-right text-accent-foreground">
-                          {formatRupiah(summary.paidAmount)}
-                        </td>
-                        <td className="px-4 py-4 text-right text-destructive">
-                          {formatRupiah(summary.unpaidAmount)}
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="min-w-36">
-                            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                              <span>
-                                {summary.paidItems}/{summary.totalItems} tagihan
-                              </span>
-                              <span className="font-semibold text-foreground">
-                                {summary.paymentPercentage}%
-                              </span>
-                            </div>
-                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-primary transition-[width]"
-                                style={{ width: `${summary.paymentPercentage}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={`rounded-md px-2 py-1 text-xs font-semibold ${statusClass}`}>
-                            {statusLabel}
-                          </span>
-                        </td>
+              {paymentDetailRows.length === 0 ? (
+                <div className="mt-5 rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  Belum ada detail kewajiban untuk bootcamp ini.
+                </div>
+              ) : (
+                <div className="mt-5 overflow-hidden rounded-lg border border-border">
+                  <table className="w-full min-w-[900px] border-collapse bg-card text-sm">
+                    <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3">Peserta</th>
+                        <th className="px-4 py-3">Membayar kepada</th>
+                        <th className="px-4 py-3">Transaksi</th>
+                        <th className="px-4 py-3 text-right">Nominal</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Tanggal bayar</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {paymentDetailRows.map((detail) => (
+                        <tr key={`${detail.expenseId}-${detail.debtorId}-${detail.payerId}`}>
+                          <td className="px-4 py-4 font-medium">{detail.debtorName}</td>
+                          <td className="px-4 py-4">{detail.payerName}</td>
+                          <td className="px-4 py-4 text-muted-foreground">{detail.title}</td>
+                          <td className="px-4 py-4 text-right font-semibold">
+                            {formatRupiah(detail.amount)}
+                          </td>
+                          <td className="px-4 py-4">
+                            <span
+                              className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                                detail.status === "paid"
+                                  ? "bg-accent text-accent-foreground"
+                                  : "bg-destructive/10 text-destructive"
+                              }`}
+                            >
+                              {detail.status === "paid" ? "Sudah bayar" : "Belum bayar"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-muted-foreground">
+                            {detail.paidAt ? formatDeadline(detail.paidAt) : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <h2 className="text-xl font-semibold">Monitoring pembayaran</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pantau total kewajiban peserta dan progres pembayaran di setiap bootcamp.
+                </p>
+              </div>
+
+              {paymentSummaries.length === 0 ? (
+                <div className="mt-5 rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  Belum ada bootcamp untuk dimonitor.
+                </div>
+              ) : (
+                <div className="mt-5 overflow-hidden rounded-lg border border-border">
+                  <table className="w-full min-w-[980px] border-collapse bg-card text-sm">
+                    <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3">Bootcamp</th>
+                        <th className="px-4 py-3 text-right">Total tagihan</th>
+                        <th className="px-4 py-3 text-right">Sudah dibayar</th>
+                        <th className="px-4 py-3 text-right">Belum dibayar</th>
+                        <th className="px-4 py-3">Progress</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {paymentSummaries.map((summary) => {
+                        const statusLabel =
+                          summary.status === "paid"
+                            ? "Lunas"
+                            : summary.status === "partial"
+                              ? "Sebagian"
+                              : summary.status === "unpaid"
+                                ? "Belum dibayar"
+                                : "Belum ada tagihan";
+                        const statusClass =
+                          summary.status === "paid"
+                            ? "bg-accent text-accent-foreground"
+                            : summary.status === "partial"
+                              ? "bg-muted text-foreground"
+                              : summary.status === "unpaid"
+                                ? "bg-destructive/10 text-destructive"
+                                : "bg-muted text-muted-foreground";
+
+                        return (
+                          <tr key={summary.bootcampId}>
+                            <td className="px-4 py-4 font-medium">{summary.bootcampName}</td>
+                            <td className="px-4 py-4 text-right font-semibold">
+                              {formatRupiah(summary.totalAmount)}
+                            </td>
+                            <td className="px-4 py-4 text-right text-accent-foreground">
+                              {formatRupiah(summary.paidAmount)}
+                            </td>
+                            <td className="px-4 py-4 text-right text-destructive">
+                              {formatRupiah(summary.unpaidAmount)}
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="min-w-36">
+                                <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                                  <span>
+                                    {summary.paidItems}/{summary.totalItems} tagihan
+                                  </span>
+                                  <span className="font-semibold text-foreground">
+                                    {summary.paymentPercentage}%
+                                  </span>
+                                </div>
+                                <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-[width]"
+                                    style={{ width: `${summary.paymentPercentage}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className={`rounded-md px-2 py-1 text-xs font-semibold ${statusClass}`}>
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <button
+                                aria-label={`Lihat detail pembayaran ${summary.bootcampName}`}
+                                className="focus-ring inline-grid size-9 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                onClick={() => setSelectedPaymentBootcampId(summary.bootcampId)}
+                                title="Lihat detail pembayaran"
+                                type="button"
+                              >
+                                <ChevronRight size={17} strokeWidth={1.8} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </section>
       ) : null}

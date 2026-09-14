@@ -195,6 +195,27 @@ describe("admin payment monitoring", () => {
   });
 });
 
+describe("admin payment monitoring detail", () => {
+  it("provides a bootcamp detail view for debtor-to-payer payment status", () => {
+    for (const paymentDetailRequirement of [
+      "buildBootcampPaymentDetailRows",
+      "selectedPaymentBootcampId",
+      "Kembali ke ringkasan",
+      "Lihat detail pembayaran",
+      "Membayar kepada",
+      "Sudah bayar",
+      "Belum bayar",
+      "Tanggal bayar",
+    ]) {
+      assert.equal(
+        trackerApp.includes(paymentDetailRequirement),
+        true,
+        `${paymentDetailRequirement} should be represented in admin payment monitoring detail`,
+      );
+    }
+  });
+});
+
 describe("participant expense editing", () => {
   it("shows edit controls only for transactions created by the active participant", () => {
     for (const participantEditRequirement of [

@@ -300,6 +300,53 @@ export function buildBootcampPaymentSummaries(
   });
 }
 
+/**
+ * @param {string} bootcampId
+ * @param {Array<{bootcampId: string, id: string, payerId: string, title: string, participants?: Array<{userId: string, shareAmount: number}>}>} expenses
+ * @param {Record<string, {name?: string}>} usersById
+ * @param {Array<{debtorId: string, expenseId: string, payerId: string, paidAt?: string | null}>} settlementPayments
+ * @returns {Array<{
+ *   amount: number,
+ *   debtorId: string,
+ *   debtorName: string,
+ *   expenseId: string,
+ *   paidAt: string | null,
+ *   payerId: string,
+ *   payerName: string,
+ *   status: "paid" | "unpaid",
+ *   title: string
+ * }>}
+ */
+export function buildBootcampPaymentDetailRows(
+  bootcampId,
+  expenses,
+  usersById,
+  settlementPayments = [],
+) {
+  const paidSettlementByKey = new Map(
+    settlementPayments.map((payment) => [
+      createSettlementPaymentKey(payment),
+      payment,
+    ]),
+  );
+
+  return calculateSettlementRows(
+    expenses.filter((expense) => expense.bootcampId === bootcampId),
+    usersById,
+  )
+    .filter((row) => Number.isFinite(Number(row.amount)) && Number(row.amount) > 0)
+    .map((row) => {
+      const payment = paidSettlementByKey.get(createSettlementPaymentKey(row));
+
+      return {
+        ...row,
+        amount: Number(row.amount),
+        paidAt: payment?.paidAt ?? null,
+        status: payment ? "paid" : "unpaid",
+      };
+    });
+}
+
 export function formatRupiah(value) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",

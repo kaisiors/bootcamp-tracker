@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   balanceExpenseShareValues,
+  buildBootcampPaymentDetailRows,
   buildBootcampPaymentSummaries,
   buildParticipantSettlementGroups,
   calculateParticipantSummary,
@@ -421,6 +422,82 @@ describe("buildBootcampPaymentSummaries", () => {
         totalItems: 0,
         unpaidAmount: 0,
         unpaidItems: 0,
+      },
+    ]);
+  });
+});
+
+describe("buildBootcampPaymentDetailRows", () => {
+  it("lists each debtor-to-payer obligation with its payment status", () => {
+    const rows = buildBootcampPaymentDetailRows(
+      "bc-next-08",
+      [
+        {
+          bootcampId: "bc-next-08",
+          id: "expense-1",
+          payerId: "nala",
+          participants: [
+            { shareAmount: 25000, userId: "bima" },
+            { shareAmount: 75000, userId: "nala" },
+          ],
+          title: "Snack",
+        },
+        {
+          bootcampId: "bc-next-08",
+          id: "expense-2",
+          payerId: "raka",
+          participants: [
+            { shareAmount: 30000, userId: "bima" },
+            { shareAmount: 30000, userId: "raka" },
+          ],
+          title: "Transport",
+        },
+        {
+          bootcampId: "bc-ui-09",
+          id: "expense-3",
+          payerId: "dewi",
+          participants: [{ shareAmount: 40000, userId: "bima" }],
+          title: "Workshop kit",
+        },
+      ],
+      {
+        bima: { name: "Bima Prasetya" },
+        dewi: { name: "Dewi Anggraini" },
+        nala: { name: "Nala Kusuma" },
+        raka: { name: "Raka Wibisana" },
+      },
+      [
+        {
+          debtorId: "bima",
+          expenseId: "expense-1",
+          paidAt: "2026-09-01T10:00:00.000Z",
+          payerId: "nala",
+        },
+      ],
+    );
+
+    assert.deepEqual(rows, [
+      {
+        amount: 25000,
+        debtorId: "bima",
+        debtorName: "Bima Prasetya",
+        expenseId: "expense-1",
+        paidAt: "2026-09-01T10:00:00.000Z",
+        payerId: "nala",
+        payerName: "Nala Kusuma",
+        status: "paid",
+        title: "Snack",
+      },
+      {
+        amount: 30000,
+        debtorId: "bima",
+        debtorName: "Bima Prasetya",
+        expenseId: "expense-2",
+        paidAt: null,
+        payerId: "raka",
+        payerName: "Raka Wibisana",
+        status: "unpaid",
+        title: "Transport",
       },
     ]);
   });
