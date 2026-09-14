@@ -1,4 +1,5 @@
 import { parseRupiahInput, splitExpenseEvenly } from "./finance.js";
+import { isValidDateOnly } from "./date-format.js";
 
 export const expenseStorageKey = "bootcamp-spending-tracker:expenses";
 
@@ -16,6 +17,10 @@ export function createExpenseFromDraft(draft, existingExpenses = []) {
 
   if (participantIds.length === 0) {
     throw new Error("Pilih minimal satu peserta.");
+  }
+
+  if (!isValidDateOnly(draft.expenseDate)) {
+    throw new Error("Tanggal transaksi harus menggunakan format YYYY-MM-DD.");
   }
 
   const idBase = slugify(`${draft.title}-${draft.expenseDate}`);

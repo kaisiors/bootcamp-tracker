@@ -387,6 +387,19 @@ describe("backend data store", () => {
       { userId: participantIds[1], shareAmount: 50000 },
       { userId: participantIds[2], shareAmount: 30000 },
     ]);
+
+    await assert.rejects(
+      () =>
+        updateExpense(created.expense.id, {
+          title: "Backend edit custom invalid date",
+          amount: "150.000",
+          bootcampId,
+          expenseDate: "not-a-date",
+          payerId: participantIds[1],
+          participantIds,
+        }),
+      /Tanggal transaksi harus menggunakan format YYYY-MM-DD/,
+    );
   });
 
   it("lets participants update only expenses they created", async () => {

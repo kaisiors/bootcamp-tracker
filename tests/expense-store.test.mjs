@@ -84,6 +84,24 @@ describe("expense store helpers", () => {
     );
   });
 
+  it("rejects transaction dates that are not valid calendar dates", () => {
+    assert.throws(
+      () =>
+        createExpenseFromDraft(
+          {
+            title: "Tanggal rusak",
+            amount: "100.000",
+            bootcampId: "bc-ui-09",
+            expenseDate: "not-a-date",
+            payerId: "ghoni",
+            participantIds: ["ghoni", "maya"],
+          },
+          expenses,
+        ),
+      /Tanggal transaksi harus menggunakan format YYYY-MM-DD/,
+    );
+  });
+
   it("keeps the stored expense snapshot after admin changes", () => {
     const createdExpense = createExpenseFromDraft(
       {

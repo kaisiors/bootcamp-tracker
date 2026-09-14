@@ -54,6 +54,7 @@ import {
   expenses,
   participants,
 } from "../lib/mock-data.js";
+import { formatDate, formatDeadline } from "../lib/date-format.js";
 import {
   balanceExpenseShareValues,
   buildParticipantSettlementGroups,
@@ -3774,24 +3775,6 @@ function StatusPill({
       {label}
     </span>
   );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function formatDeadline(value: string) {
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
 }
 
 function toDateTimeLocalInput(value: string) {

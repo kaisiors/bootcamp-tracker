@@ -10,6 +10,7 @@ import {
   resolveExpenseParticipantShares,
 } from "../expense-store.js";
 import { parseRupiahInput } from "../finance.js";
+import { isValidDateOnly } from "../date-format.js";
 import { bootcamps, expenses, notifications, participants } from "../mock-data.js";
 import { createParticipantFromRegistration } from "../participant-store.js";
 
@@ -511,7 +512,7 @@ export async function updateExpense(id, payload, options = {}) {
     const expense = {
       amount,
       bootcampId: bootcamp.id,
-      expenseDate: requireString(payload.expenseDate, "Tanggal transaksi"),
+      expenseDate: requireDateOnly(payload.expenseDate, "Tanggal transaksi"),
       id,
       participants: resolveExpenseParticipantShares(
         amount,
@@ -1138,6 +1139,16 @@ function requireString(value, label) {
 
   if (!normalized) {
     throw createHttpError(422, `${label} wajib diisi.`);
+  }
+
+  return normalized;
+}
+
+function requireDateOnly(value, label) {
+  const normalized = requireString(value, label);
+
+  if (!isValidDateOnly(normalized)) {
+    throw createHttpError(422, `${label} harus menggunakan format YYYY-MM-DD.`);
   }
 
   return normalized;
