@@ -20,6 +20,7 @@ import {
   ReceiptText,
   Search,
   Trash2,
+  UserCheck,
   Users,
   WalletCards,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import {
   getAppState as fetchAppState,
   logout as requestLogout,
   recordSettlementPayment as requestRecordSettlementPayment,
+  reviewBootcampJoinRequest as requestReviewBootcampJoinRequest,
   updateBootcamp as requestUpdateBootcamp,
   updateExpense as requestUpdateExpense,
 } from "../lib/api-client.js";
@@ -107,6 +109,19 @@ type AdminPaymentDetailRow = {
   status: "paid" | "unpaid";
   title: string;
 };
+type JoinRequestStatus = "pending" | "approved" | "rejected";
+type JoinRequestRecord = {
+  bootcampId: string;
+  bootcampName: string;
+  id: string;
+  participantEmail: string;
+  participantId: string;
+  participantName: string;
+  requestedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  status: JoinRequestStatus;
+};
 type SettlementPaymentGroup = {
   bank: ParticipantRecord["bank"] | null;
   items: SettlementPaymentItem[];
@@ -128,6 +143,7 @@ type AdminView =
   | "participants"
   | "bankAccounts"
   | "payments"
+  | "approvals"
   | "expenses";
 type DeleteConfirmation = {
   kind: "bootcamp" | "participant" | "expense";
@@ -152,6 +168,7 @@ const adminNavItems = [
   { id: "participants", label: "Peserta", icon: Users },
   { id: "bankAccounts", label: "Rekening", icon: CreditCard },
   { id: "payments", label: "Pembayaran", icon: CircleDollarSign },
+  { id: "approvals", label: "Approval", icon: UserCheck },
   { id: "expenses", label: "Transaksi", icon: ReceiptText },
 ] satisfies Array<{ id: AdminView; label: string; icon: typeof LayoutDashboard }>;
 
@@ -2243,6 +2260,7 @@ export function AdminWorkspace() {
   const [allSettlementPayments, setAllSettlementPayments] = useState<
     SettlementPaymentRecord[]
   >([]);
+  const [joinRequests, setJoinRequests] = useState<JoinRequestRecord[]>([]);
   const [selectedPaymentBootcampId, setSelectedPaymentBootcampId] = useState<
     string | null
   >(null);
@@ -2285,6 +2303,11 @@ export function AdminWorkspace() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isLoadingAdminData, setIsLoadingAdminData] = useState(true);
   const [isSavingExpenseEdit, setIsSavingExpenseEdit] = useState(false);
+  const [reviewingJoinRequestId, setReviewingJoinRequestId] = useState<string | null>(
+    null,
+  );
+  const [reviewingJoinRequestStatus, setReviewingJoinRequestStatus] =
+    useState<JoinRequestStatus | null>(null);
   const [deletingBootcampId, setDeletingBootcampId] = useState<string | null>(
     null,
   );
@@ -2308,6 +2331,7 @@ export function AdminWorkspace() {
         setAllParticipants(state.participants);
         setAllExpenses(state.expenses);
         setAllSettlementPayments(state.settlementPayments ?? []);
+        setJoinRequests(state.joinRequests ?? []);
         setNewParticipantBootcampId((current) =>
           state.bootcamps.some((item: BootcampRecord) => item.id === current)
             ? current
@@ -2414,20 +2438,27 @@ export function AdminWorkspace() {
     isCreatingParticipant ||
     isLoggingOut ||
     isSavingExpenseEdit ||
+    Boolean(reviewingJoinRequestId) ||
     isDeletingRecord;
-  const adminBlockingMessage = isLoggingOut
-    ? "Memproses logout admin..."
-    : isSavingBootcamp
-      ? editingBootcampId
-        ? "Menyimpan perubahan bootcamp..."
-        : "Menyimpan bootcamp baru..."
-      : isCreatingParticipant
-        ? "Menyimpan peserta baru..."
-        : isSavingExpenseEdit
-          ? "Menyimpan perubahan transaksi..."
-          : isDeletingRecord
-            ? "Menghapus data..."
-            : "Memproses...";
+  const adminBlockingMessage = reviewingJoinRequestStatus === "approved"
+    ? "Menyetujui pengajuan bootcamp..."
+    : reviewingJoinRequestStatus === "rejected"
+      ? "Menolak pengajuan bootcamp..."
+      : reviewingJoinRequestId
+        ? "Memproses approval bootcamp..."
+        : isLoggingOut
+          ? "Memproses logout admin..."
+          : isSavingBootcamp
+            ? editingBootcampId
+              ? "Menyimpan perubahan bootcamp..."
+              : "Menyimpan bootcamp baru..."
+            : isCreatingParticipant
+              ? "Menyimpan peserta baru..."
+              : isSavingExpenseEdit
+                ? "Menyimpan perubahan transaksi..."
+                : isDeletingRecord
+                  ? "Menghapus data..."
+                  : "Memproses...";
   const allEditExpenseParticipantsSelected =
     editExpenseParticipants.length > 0 &&
     editExpenseVisibleCheckedIds.length === editExpenseParticipants.length;
@@ -2478,6 +2509,7 @@ export function AdminWorkspace() {
         setAllParticipants(result.state.participants);
         setAllExpenses(result.state.expenses);
         setAllSettlementPayments(result.state.settlementPayments ?? []);
+        setJoinRequests(result.state.joinRequests ?? []);
         setEditingBootcampId(null);
         setAdminMessage("Perubahan bootcamp tersimpan.");
       } else {
@@ -2494,6 +2526,7 @@ export function AdminWorkspace() {
         setAllParticipants(result.state.participants);
         setAllExpenses(result.state.expenses);
         setAllSettlementPayments(result.state.settlementPayments ?? []);
+        setJoinRequests(result.state.joinRequests ?? []);
         saveSelectedBootcampId(result.bootcamp.id);
         setCreatedBootcampId(result.bootcamp.id);
         setNewParticipantBootcampId(result.bootcamp.id);
@@ -2701,6 +2734,7 @@ export function AdminWorkspace() {
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
       setAllSettlementPayments(result.state.settlementPayments ?? []);
+      setJoinRequests(result.state.joinRequests ?? []);
       resetExpenseEditForm();
       setAdminMessage("Perubahan transaksi tersimpan.");
     } catch (error) {
@@ -2760,6 +2794,7 @@ export function AdminWorkspace() {
       setAllParticipants(state.participants);
       setAllExpenses(state.expenses);
       setAllSettlementPayments(state.settlementPayments ?? []);
+      setJoinRequests(state.joinRequests ?? []);
       setAdminMessage("Bootcamp dihapus dari daftar admin dan pilihan peserta.");
     } catch (error) {
       setAdminMessage(
@@ -2794,6 +2829,7 @@ export function AdminWorkspace() {
       setAllParticipants(result.state.participants);
       setAllExpenses(result.state.expenses);
       setAllSettlementPayments(result.state.settlementPayments ?? []);
+      setJoinRequests(result.state.joinRequests ?? []);
       setNewParticipantName("");
       setNewParticipantEmail("");
       setNewParticipantPhone("");
@@ -2825,6 +2861,7 @@ export function AdminWorkspace() {
       setAllParticipants(state.participants);
       setAllExpenses(state.expenses);
       setAllSettlementPayments(state.settlementPayments ?? []);
+      setJoinRequests(state.joinRequests ?? []);
       setAdminMessage("Peserta dihapus dari daftar dan transaksi terkait diperbarui.");
     } catch (error) {
       setAdminMessage(
@@ -2849,6 +2886,7 @@ export function AdminWorkspace() {
       setAllParticipants(state.participants);
       setAllExpenses(state.expenses);
       setAllSettlementPayments(state.settlementPayments ?? []);
+      setJoinRequests(state.joinRequests ?? []);
       setAdminMessage("Transaksi dihapus dari rekap.");
     } catch (error) {
       setAdminMessage(
@@ -2856,6 +2894,43 @@ export function AdminWorkspace() {
       );
     } finally {
       setDeletingExpenseId(null);
+    }
+  }
+
+  async function handleReviewBootcampJoinRequest(
+    request: JoinRequestRecord,
+    status: Extract<JoinRequestStatus, "approved" | "rejected">,
+  ) {
+    if (reviewingJoinRequestId) {
+      return;
+    }
+
+    setReviewingJoinRequestId(request.id);
+    setReviewingJoinRequestStatus(status);
+    setAdminMessage("");
+
+    try {
+      const result = await requestReviewBootcampJoinRequest(request.id, status);
+
+      setManagedBootcamps(result.state.bootcamps);
+      setAllParticipants(result.state.participants);
+      setAllExpenses(result.state.expenses);
+      setAllSettlementPayments(result.state.settlementPayments ?? []);
+      setJoinRequests(result.state.joinRequests ?? []);
+      setAdminMessage(
+        status === "approved"
+          ? `${request.participantName} disetujui untuk masuk ke ${request.bootcampName}.`
+          : `${request.participantName} ditolak untuk masuk ke ${request.bootcampName}.`,
+      );
+    } catch (error) {
+      setAdminMessage(
+        error instanceof Error
+          ? error.message
+          : "Approval bootcamp gagal diproses.",
+      );
+    } finally {
+      setReviewingJoinRequestId(null);
+      setReviewingJoinRequestStatus(null);
     }
   }
 
@@ -2876,7 +2951,7 @@ export function AdminWorkspace() {
           </p>
         </div>
         <div className="grid gap-3">
-          <nav className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+          <nav className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-7">
             {adminNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeAdminView === item.id;
@@ -2958,6 +3033,122 @@ export function AdminWorkspace() {
               untuk membuka setiap data secara terpisah.
             </p>
           </div>
+        </section>
+      ) : null}
+
+      {activeAdminView === "approvals" ? (
+        <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Approval peserta</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Tinjau permintaan peserta yang ingin bergabung ke bootcamp lain.
+              </p>
+            </div>
+            <span className="rounded-md bg-muted px-3 py-2 text-sm font-semibold text-foreground">
+              {joinRequests.filter((request) => request.status === "pending").length} pending
+            </span>
+          </div>
+
+          {joinRequests.length === 0 ? (
+            <div className="mt-5 rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              Belum ada pengajuan bergabung.
+            </div>
+          ) : (
+            <div className="mt-5 overflow-hidden rounded-lg border border-border">
+              <table className="w-full min-w-[1040px] border-collapse bg-card text-sm">
+                <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Peserta</th>
+                    <th className="px-4 py-3">Bootcamp</th>
+                    <th className="px-4 py-3">Diajukan</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {joinRequests.map((request) => {
+                    const statusLabel =
+                      request.status === "pending"
+                        ? "Menunggu"
+                        : request.status === "approved"
+                          ? "Disetujui"
+                          : "Ditolak";
+                    const statusClass =
+                      request.status === "approved"
+                        ? "bg-accent text-accent-foreground"
+                        : request.status === "rejected"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-muted text-foreground";
+                    const isReviewing = reviewingJoinRequestId === request.id;
+
+                    return (
+                      <tr key={request.id}>
+                        <td className="px-4 py-4">
+                          <p className="font-medium">{request.participantName}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {request.participantEmail}
+                          </p>
+                        </td>
+                        <td className="px-4 py-4 font-medium">{request.bootcampName}</td>
+                        <td className="px-4 py-4 text-muted-foreground">
+                          {formatDeadline(request.requestedAt)}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`rounded-md px-2 py-1 text-xs font-semibold ${statusClass}`}>
+                            {statusLabel}
+                          </span>
+                          {request.reviewedAt ? (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Diproses {formatDeadline(request.reviewedAt)}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          {request.status === "pending" ? (
+                            <div className="flex justify-end gap-2">
+                              <button
+                                className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={Boolean(reviewingJoinRequestId)}
+                                onClick={() =>
+                                  handleReviewBootcampJoinRequest(request, "approved")
+                                }
+                                type="button"
+                              >
+                                {isReviewing && reviewingJoinRequestStatus === "approved" ? (
+                                  <LoaderCircle className="animate-spin" size={15} strokeWidth={1.8} />
+                                ) : (
+                                  <Check size={15} strokeWidth={1.8} />
+                                )}
+                                Menyetujui pengajuan
+                              </button>
+                              <button
+                                className="focus-ring inline-flex h-9 items-center justify-center gap-2 rounded-md border border-destructive/40 px-3 text-xs font-semibold text-destructive transition hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={Boolean(reviewingJoinRequestId)}
+                                onClick={() =>
+                                  handleReviewBootcampJoinRequest(request, "rejected")
+                                }
+                                type="button"
+                              >
+                                {isReviewing && reviewingJoinRequestStatus === "rejected" ? (
+                                  <LoaderCircle className="animate-spin" size={15} strokeWidth={1.8} />
+                                ) : (
+                                  <AlertTriangle size={15} strokeWidth={1.8} />
+                                )}
+                                Tolak
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Sudah diproses</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       ) : null}
 

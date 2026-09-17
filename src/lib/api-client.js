@@ -82,6 +82,13 @@ export function recordSettlementPayment(payload) {
   });
 }
 
+export function reviewBootcampJoinRequest(id, status) {
+  return requestJson(`/api/bootcamp-join-requests/${encodeURIComponent(id)}`, {
+    body: JSON.stringify({ status }),
+    method: "PATCH",
+  });
+}
+
 async function requestJson(path, init = {}) {
   const response = await fetch(path, {
     ...init,

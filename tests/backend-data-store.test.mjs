@@ -30,6 +30,7 @@ const {
   getSessionByToken,
   hashPassword,
   recordSettlementPayment,
+  reviewBootcampJoinRequest,
   resetAppState,
   updateExpense,
 } = await import("../src/lib/backend/data-store.js");
@@ -67,6 +68,7 @@ describe("backend data store", () => {
       tables.rows.map((row) => row.table_name),
       [
         "bank_accounts",
+        "bootcamp_join_requests",
         "bootcamp_participants",
         "bootcamps",
         "expense_splits",
@@ -97,6 +99,180 @@ describe("backend data store", () => {
         }),
       /tidak terdaftar di bootcamp ini/,
     );
+  });
+
+  it("creates one pending request when a participant tries another bootcamp", async () => {
+    await assert.rejects(
+      () =>
+        createParticipantSession({
+          bootcampId: "bc-ui-09",
+          email: "bima.prasetya@mail.test",
+        }),
+      /menunggu approval admin|approval admin/i,
+    );
+
+    const firstState = await getAppState();
+    const firstRequests = firstState.joinRequests.filter(
+      (request) =>
+        request.participantId === "bima" && request.bootcampId === "bc-ui-09",
+    );
+
+    assert.equal(firstRequests.length, 1);
+    assert.equal(firstRequests[0].status, "pending");
+
+    await assert.rejects(
+      () =>
+        createParticipantSession({
+          bootcampId: "bc-ui-09",
+          email: "bima.prasetya@mail.test",
+        }),
+      /menunggu approval admin/i,
+    );
+
+    const secondState = await getAppState();
+    assert.equal(
+      secondState.joinRequests.filter(
+        (request) =>
+          request.participantId === "bima" && request.bootcampId === "bc-ui-09",
+      ).length,
+      1,
+    );
+  });
+
+  it("exposes join requests only to an admin session", async () => {
+    const publicState = await getAppStateForSession(null);
+    const participantLogin = await createParticipantSession({
+      bootcampId: "bc-next-08",
+      email: "bima.prasetya@mail.test",
+    });
+    const participantSession = await getSessionByToken(participantLogin.session.token);
+    const participantState = await getAppStateForSession(participantSession);
+    const adminLogin = await createAdminSession({
+      email: "admin@bootcamp.test",
+      password: "password",
+    });
+    const adminSession = await getSessionByToken(adminLogin.session.token);
+    const adminState = await getAppStateForSession(adminSession);
+
+    assert.deepEqual(publicState.joinRequests, []);
+    assert.deepEqual(participantState.joinRequests, []);
+    assert.equal(
+      adminState.joinRequests.some(
+        (request) =>
+          request.participantId === "bima" && request.bootcampId === "bc-ui-09",
+      ),
+      true,
+    );
+  });
+
+  it("lets an admin approve a request and then lets the participant log in", async () => {
+    const pending = (await getAppState()).joinRequests.find(
+      (request) =>
+        request.participantId === "bima" && request.bootcampId === "bc-ui-09",
+    );
+    const adminLogin = await createAdminSession({
+      email: "admin@bootcamp.test",
+      password: "password",
+    });
+    const adminSession = await getSessionByToken(adminLogin.session.token);
+
+    const result = await reviewBootcampJoinRequest(
+      pending.id,
+      "approved",
+      adminSession.userId,
+    );
+
+    assert.equal(
+      result.state.joinRequests.find((request) => request.id === pending.id).status,
+      "approved",
+    );
+    assert.ok(
+      result.state.participants
+        .find((participant) => participant.id === "bima")
+        .bootcampIds.includes("bc-ui-09"),
+    );
+
+    const participantLogin = await createParticipantSession({
+      bootcampId: "bc-ui-09",
+      email: "bima.prasetya@mail.test",
+    });
+    assert.equal(participantLogin.participant.id, "bima");
+  });
+
+  it("keeps a rejected bootcamp request inaccessible", async () => {
+    await resetAppState();
+    await assert.rejects(
+      () =>
+        createParticipantSession({
+          bootcampId: "bc-ui-09",
+          email: "bima.prasetya@mail.test",
+        }),
+      /approval admin/i,
+    );
+
+    const pending = (await getAppState()).joinRequests.find(
+      (request) =>
+        request.participantId === "bima" && request.bootcampId === "bc-ui-09",
+    );
+    const adminLogin = await createAdminSession({
+      email: "admin@bootcamp.test",
+      password: "password",
+    });
+    const adminSession = await getSessionByToken(adminLogin.session.token);
+
+    await reviewBootcampJoinRequest(pending.id, "rejected", adminSession.userId);
+
+    await assert.rejects(
+      () =>
+        createParticipantSession({
+          bootcampId: "bc-ui-09",
+          email: "bima.prasetya@mail.test",
+        }),
+      /ditolak admin/i,
+    );
+    assert.equal(
+      (await getAppState()).participants
+        .find((participant) => participant.id === "bima")
+        .bootcampIds.includes("bc-ui-09"),
+      false,
+    );
+  });
+
+  it("rejects invalid or repeated admin review actions", async () => {
+    await resetAppState();
+    await assert.rejects(
+      () => reviewBootcampJoinRequest("missing-request", "approved", "admin"),
+      /tidak ditemukan/i,
+    );
+    await assert.rejects(
+      () => reviewBootcampJoinRequest("missing-request", "pending", "admin"),
+      /tidak valid/i,
+    );
+
+    await assert.rejects(
+      () =>
+        createParticipantSession({
+          bootcampId: "bc-ui-09",
+          email: "bima.prasetya@mail.test",
+        }),
+      /approval admin/i,
+    );
+    const pending = (await getAppState()).joinRequests.find(
+      (request) =>
+        request.participantId === "bima" && request.bootcampId === "bc-ui-09",
+    );
+    const adminLogin = await createAdminSession({
+      email: "admin@bootcamp.test",
+      password: "password",
+    });
+    const adminSession = await getSessionByToken(adminLogin.session.token);
+
+    await reviewBootcampJoinRequest(pending.id, "approved", adminSession.userId);
+    await assert.rejects(
+      () => reviewBootcampJoinRequest(pending.id, "rejected", adminSession.userId),
+      /sudah diproses/i,
+    );
+    await resetAppState();
   });
 
   it("validates database-backed admin credentials", async () => {

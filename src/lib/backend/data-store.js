@@ -33,6 +33,7 @@ export async function getAppStateForSession(session) {
       return {
         bootcamps: state.bootcamps.filter((bootcamp) => bootcamp.status === "active"),
         expenses: [],
+        joinRequests: [],
         notifications: [],
         participants: [],
         settlementPayments: [],
@@ -60,6 +61,7 @@ export async function getAppStateForSession(session) {
       expenses: state.expenses.filter((expense) =>
         visibleBootcampIds.has(expense.bootcampId),
       ),
+      joinRequests: [],
       notifications: state.notifications.filter((notification) =>
         visibleBootcampIds.has(notification.bootcampId),
       ),
@@ -84,26 +86,9 @@ export async function resetAppState() {
 }
 
 export async function authenticateParticipant({ email, bootcampId }) {
-  const data = await getAppState();
-  const normalizedEmail = String(email ?? "").trim().toLowerCase();
-  const participant = data.participants.find(
-    (item) => item.email.toLowerCase() === normalizedEmail,
+  return withDatabase((client) =>
+    authenticateParticipantWithClient(client, { email, bootcampId }),
   );
-  const bootcamp = data.bootcamps.find((item) => item.id === bootcampId);
-
-  if (!participant) {
-    throw createHttpError(404, "Email peserta belum terdaftar.");
-  }
-
-  if (!bootcamp || bootcamp.status !== "active") {
-    throw createHttpError(404, "Bootcamp aktif tidak ditemukan.");
-  }
-
-  if (!participant.bootcampIds.includes(bootcamp.id)) {
-    throw createHttpError(403, "Peserta tidak terdaftar di bootcamp ini.");
-  }
-
-  return { bootcamp, participant };
 }
 
 export async function authenticateAdmin({ email, password }) {
@@ -119,7 +104,11 @@ export async function authenticateAdmin({ email, password }) {
 
 export async function createParticipantSession(payload) {
   return withDatabase(async (client) => {
-    const { bootcamp, participant } = await authenticateParticipant(payload);
+    const { bootcamp, participant } = await authenticateParticipantWithClient(
+      client,
+      payload,
+      { createJoinRequest: true },
+    );
     const user = await client.query(
       "SELECT id FROM users WHERE participant_id = $1 LIMIT 1",
       [participant.id],
@@ -377,6 +366,68 @@ export async function deleteParticipant(id) {
     await client.query("DELETE FROM users WHERE participant_id = $1", [id]);
 
     return readState(client);
+  });
+}
+
+export async function reviewBootcampJoinRequest(id, status, reviewerId) {
+  return withDatabase(async (client) => {
+    if (status !== "approved" && status !== "rejected") {
+      throw createHttpError(422, "Status approval tidak valid.");
+    }
+
+    if (!reviewerId) {
+      throw createHttpError(401, "Session admin tidak valid.");
+    }
+
+    const requestResult = await client.query(
+      `SELECT id, bootcamp_id, participant_id, status
+       FROM bootcamp_join_requests
+       WHERE id = $1
+       LIMIT 1`,
+      [id],
+    );
+    const joinRequest = requestResult.rows[0];
+
+    if (!joinRequest) {
+      throw createHttpError(404, "Pengajuan bergabung tidak ditemukan.");
+    }
+
+    if (joinRequest.status !== "pending") {
+      throw createHttpError(409, "Pengajuan bergabung sudah diproses.");
+    }
+
+    const reviewedAt = new Date().toISOString();
+
+    await client.query("BEGIN");
+
+    try {
+      if (status === "approved") {
+        await client.query(
+          `INSERT INTO bootcamp_participants (bootcamp_id, participant_id)
+           VALUES ($1, $2)
+           ON CONFLICT (bootcamp_id, participant_id) DO NOTHING`,
+          [joinRequest.bootcamp_id, joinRequest.participant_id],
+        );
+      }
+
+      const updateResult = await client.query(
+        `UPDATE bootcamp_join_requests
+         SET status = $1, reviewed_at = $2, reviewed_by = $3
+         WHERE id = $4 AND status = 'pending'`,
+        [status, reviewedAt, reviewerId, id],
+      );
+
+      if (updateResult.rowCount === 0) {
+        throw createHttpError(409, "Pengajuan bergabung sudah diproses.");
+      }
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+
+    return { state: await readState(client) };
   });
 }
 
@@ -691,6 +742,124 @@ async function withDatabase(callback) {
   }
 }
 
+async function authenticateParticipantWithClient(
+  client,
+  { email, bootcampId },
+  { createJoinRequest = false } = {},
+) {
+  const normalizedEmail = String(email ?? "").trim().toLowerCase();
+  const participantResult = await client.query(
+    `SELECT p.id, p.name, p.email, p.phone,
+            b.bank_name, b.account_number, b.account_holder_name
+     FROM participants p
+     JOIN bank_accounts b ON b.participant_id = p.id
+     WHERE lower(p.email) = $1
+     LIMIT 1`,
+    [normalizedEmail],
+  );
+  const participantRow = participantResult.rows[0];
+
+  if (!participantRow) {
+    throw createHttpError(404, "Email peserta belum terdaftar.");
+  }
+
+  const bootcampResult = await client.query(
+    `SELECT id, name, location, start_date, end_date, payment_deadline, status
+     FROM bootcamps
+     WHERE id = $1 AND status = 'active'
+     LIMIT 1`,
+    [bootcampId],
+  );
+  const bootcampRow = bootcampResult.rows[0];
+
+  if (!bootcampRow) {
+    throw createHttpError(404, "Bootcamp aktif tidak ditemukan.");
+  }
+
+  const participant = {
+    bank: {
+      accountHolderName: participantRow.account_holder_name,
+      accountNumber: participantRow.account_number,
+      bankName: participantRow.bank_name,
+    },
+    email: participantRow.email,
+    id: participantRow.id,
+    name: participantRow.name,
+    phone: participantRow.phone,
+  };
+  const bootcamp = {
+    endDate: bootcampRow.end_date,
+    id: bootcampRow.id,
+    location: bootcampRow.location,
+    name: bootcampRow.name,
+    paymentDeadline: bootcampRow.payment_deadline,
+    startDate: bootcampRow.start_date,
+    status: bootcampRow.status,
+  };
+  const membershipResult = await client.query(
+    `SELECT 1
+     FROM bootcamp_participants
+     WHERE bootcamp_id = $1 AND participant_id = $2
+     LIMIT 1`,
+    [bootcamp.id, participant.id],
+  );
+
+  if (membershipResult.rowCount > 0) {
+    return { bootcamp, participant };
+  }
+
+  const requestResult = await client.query(
+    `SELECT status
+     FROM bootcamp_join_requests
+     WHERE bootcamp_id = $1 AND participant_id = $2
+     LIMIT 1`,
+    [bootcamp.id, participant.id],
+  );
+  let joinRequest = requestResult.rows[0];
+
+  if (!joinRequest && createJoinRequest) {
+    await client.query(
+      `INSERT INTO bootcamp_join_requests
+       (id, bootcamp_id, participant_id, status, requested_at)
+       VALUES ($1, $2, $3, 'pending', $4)
+       ON CONFLICT (participant_id, bootcamp_id) DO NOTHING`,
+      [
+        `join-${hashToken(`${participant.id}:${bootcamp.id}`).slice(0, 16)}`,
+        bootcamp.id,
+        participant.id,
+        new Date().toISOString(),
+      ],
+    );
+
+    const createdRequestResult = await client.query(
+      `SELECT status
+       FROM bootcamp_join_requests
+       WHERE bootcamp_id = $1 AND participant_id = $2
+       LIMIT 1`,
+      [bootcamp.id, participant.id],
+    );
+    joinRequest = createdRequestResult.rows[0];
+  }
+
+  if (joinRequest?.status === "pending") {
+    throw createHttpError(
+      403,
+      createJoinRequest
+        ? "Permintaan bergabung sudah dikirim dan menunggu approval admin."
+        : "Permintaan bergabung masih menunggu approval admin.",
+    );
+  }
+
+  if (joinRequest?.status === "rejected") {
+    throw createHttpError(
+      403,
+      "Permintaan bergabung ditolak admin. Anda tidak dapat masuk ke bootcamp ini.",
+    );
+  }
+
+  throw createHttpError(403, "Peserta tidak terdaftar di bootcamp ini.");
+}
+
 async function authenticateAdminWithClient(client, { email, password }) {
   const normalizedEmail = String(email ?? "").trim().toLowerCase();
   const rawPassword = String(password ?? "");
@@ -770,6 +939,20 @@ async function migrate(client) {
       participant_id TEXT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
       PRIMARY KEY (bootcamp_id, participant_id)
     );
+
+    CREATE TABLE IF NOT EXISTS bootcamp_join_requests (
+      id TEXT PRIMARY KEY,
+      bootcamp_id TEXT NOT NULL REFERENCES bootcamps(id) ON DELETE CASCADE,
+      participant_id TEXT NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+      requested_at TEXT NOT NULL,
+      reviewed_at TEXT,
+      reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+      UNIQUE (participant_id, bootcamp_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS bootcamp_join_requests_status_requested_at_idx
+      ON bootcamp_join_requests (status, requested_at DESC);
 
     CREATE TABLE IF NOT EXISTS expenses (
       id TEXT PRIMARY KEY,
@@ -852,6 +1035,7 @@ async function dropTables(client) {
     DROP TABLE IF EXISTS expense_splits CASCADE;
     DROP TABLE IF EXISTS expenses CASCADE;
     DROP TABLE IF EXISTS notifications CASCADE;
+    DROP TABLE IF EXISTS bootcamp_join_requests CASCADE;
     DROP TABLE IF EXISTS bootcamp_participants CASCADE;
     DROP TABLE IF EXISTS bank_accounts CASCADE;
     DROP TABLE IF EXISTS participants CASCADE;
@@ -1004,6 +1188,16 @@ async function readState(client) {
      FROM bootcamp_participants
      ORDER BY bootcamp_id ASC, participant_id ASC`,
   );
+  const joinRequestRows = await client.query(
+    `SELECT r.id, r.bootcamp_id, r.participant_id, r.status, r.requested_at,
+            r.reviewed_at, r.reviewed_by, b.name AS bootcamp_name,
+            p.name AS participant_name, p.email AS participant_email
+     FROM bootcamp_join_requests r
+     JOIN bootcamps b ON b.id = r.bootcamp_id
+     JOIN participants p ON p.id = r.participant_id
+     ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END,
+              r.requested_at DESC, r.id ASC`,
+  );
   const expenseRows = await client.query(
     `SELECT id, title, amount, bootcamp_id, expense_date, payer_id
      FROM expenses
@@ -1048,6 +1242,18 @@ async function readState(client) {
         })),
       payerId: row.payer_id,
       title: row.title,
+    })),
+    joinRequests: joinRequestRows.rows.map((row) => ({
+      bootcampId: row.bootcamp_id,
+      bootcampName: row.bootcamp_name,
+      id: row.id,
+      participantEmail: row.participant_email,
+      participantId: row.participant_id,
+      participantName: row.participant_name,
+      requestedAt: row.requested_at,
+      reviewedAt: row.reviewed_at,
+      reviewedBy: row.reviewed_by,
+      status: row.status,
     })),
     notifications: notificationRows.rows.map((row) => ({
       bootcampId: row.bootcamp_id,

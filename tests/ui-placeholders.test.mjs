@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 const authPages = readFileSync("src/components/auth-pages.tsx", "utf8");
 const trackerApp = readFileSync("src/components/bootcamp-tracker-app.tsx", "utf8");
+const dataStore = readFileSync("src/lib/backend/data-store.js", "utf8");
 const fullPageOverlayPath = "src/components/full-page-loading-overlay.tsx";
 const fullPageOverlay = existsSync(fullPageOverlayPath)
   ? readFileSync(fullPageOverlayPath, "utf8")
@@ -211,6 +212,39 @@ describe("admin payment monitoring detail", () => {
         trackerApp.includes(paymentDetailRequirement),
         true,
         `${paymentDetailRequirement} should be represented in admin payment monitoring detail`,
+      );
+    }
+  });
+});
+
+describe("bootcamp join approval UI", () => {
+  it("shows approval navigation, actions, loading, and participant warnings", () => {
+    for (const approvalRequirement of [
+      'id: "approvals"',
+      'label: "Approval"',
+      "joinRequests",
+      "Menyetujui pengajuan",
+      "Tolak",
+      "pending",
+      "approved",
+      "rejected",
+      "Memproses approval bootcamp...",
+    ]) {
+      assert.equal(
+        trackerApp.includes(approvalRequirement),
+        true,
+        `${approvalRequirement} should be represented in the bootcamp join approval flow`,
+      );
+    }
+
+    for (const warningRequirement of [
+      "menunggu approval admin",
+      "ditolak admin",
+    ]) {
+      assert.equal(
+        dataStore.includes(warningRequirement),
+        true,
+        `${warningRequirement} should be represented in participant login warnings`,
       );
     }
   });
