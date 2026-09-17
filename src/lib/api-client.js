@@ -55,6 +55,13 @@ export function deleteParticipant(id) {
   });
 }
 
+export function updateParticipantProfile(id, payload) {
+  return requestJson(`/api/participants/${encodeURIComponent(id)}`, {
+    body: JSON.stringify(payload),
+    method: "PATCH",
+  });
+}
+
 export function createExpense(payload) {
   return requestJson("/api/expenses", {
     body: JSON.stringify(payload),

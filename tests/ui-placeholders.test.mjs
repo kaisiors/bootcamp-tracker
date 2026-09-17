@@ -272,6 +272,24 @@ describe("participant expense editing", () => {
   });
 });
 
+describe("participant profile editing", () => {
+  it("shows the profile form and its protected save flow", () => {
+    for (const profileRequirement of [
+      'id: "profile"',
+      'label: "Profil"',
+      "updateParticipantProfile",
+      "Menyimpan profil peserta...",
+      "Nomor rekening",
+    ]) {
+      assert.equal(
+        trackerApp.includes(profileRequirement),
+        true,
+        `${profileRequirement} should be represented in the participant profile flow`,
+      );
+    }
+  });
+});
+
 describe("participant dashboard overview", () => {
   it("does not show notification and participant access sections or navigation", () => {
     for (const removedOverviewSection of [

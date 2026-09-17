@@ -21,6 +21,7 @@ import {
   Search,
   Trash2,
   UserCheck,
+  UserRound,
   Users,
   WalletCards,
 } from "lucide-react";
@@ -50,6 +51,7 @@ import {
   reviewBootcampJoinRequest as requestReviewBootcampJoinRequest,
   updateBootcamp as requestUpdateBootcamp,
   updateExpense as requestUpdateExpense,
+  updateParticipantProfile as requestUpdateParticipantProfile,
 } from "../lib/api-client.js";
 import {
   bootcamps,
@@ -75,7 +77,8 @@ type View =
   | "add"
   | "members"
   | "payables"
-  | "receivables";
+  | "receivables"
+  | "profile";
 
 const currentUserId = "bima";
 
@@ -160,6 +163,7 @@ const navItems = [
   { id: "transactions", label: "Rekap", icon: ReceiptText },
   { id: "add", label: "Tambah", icon: Plus },
   { id: "members", label: "Peserta", icon: Users },
+  { id: "profile", label: "Profil", icon: UserRound },
 ] satisfies Array<{ id: View; label: string; icon: typeof LayoutDashboard }>;
 
 const adminNavItems = [
@@ -222,6 +226,10 @@ export function BootcampTrackerApp() {
     useState(false);
   const [isLoggingOutParticipant, setIsLoggingOutParticipant] = useState(false);
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profileAccountNumber, setProfileAccountNumber] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [expenseEditedShareIds, setExpenseEditedShareIds] = useState<string[]>([]);
   const [expenseShareValues, setExpenseShareValues] =
@@ -275,6 +283,9 @@ export function BootcampTrackerApp() {
 
         if (nextParticipant) {
           setSelectedParticipantId(nextParticipant.id);
+          setProfileName(nextParticipant.name);
+          setProfileEmail(nextParticipant.email);
+          setProfileAccountNumber(nextParticipant.bank.accountNumber);
           saveSelectedParticipantId(nextParticipant.id);
         }
 
@@ -493,11 +504,14 @@ export function BootcampTrackerApp() {
     isSavingExpense ||
     isSavingParticipantExpenseEdit ||
     isSavingSettlementPayment ||
+    isSavingProfile ||
     isLoggingOutParticipant;
   const dashboardBlockingMessage = isLoggingOutParticipant
     ? "Memproses logout peserta..."
     : isSavingSettlementPayment
       ? "Memproses pembayaran..."
+      : isSavingProfile
+        ? "Menyimpan profil peserta..."
     : isSavingParticipantExpenseEdit
       ? "Menyimpan perubahan pengeluaran..."
       : "Menyimpan pengeluaran...";
@@ -860,6 +874,44 @@ export function BootcampTrackerApp() {
     }
   }
 
+  async function handleSaveProfile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (isSavingProfile || !currentParticipant) {
+      return;
+    }
+
+    setIsSavingProfile(true);
+
+    try {
+      const result = await requestUpdateParticipantProfile(currentParticipant.id, {
+        accountNumber: profileAccountNumber,
+        email: profileEmail,
+        name: profileName,
+      });
+      const updatedParticipant = result.participant ?? result.state.participants.find(
+        (participant: ParticipantRecord) => participant.id === currentParticipant.id,
+      );
+
+      setManagedBootcamps(result.state.bootcamps);
+      setAllParticipants(result.state.participants);
+      setAllExpenses(result.state.expenses);
+      setAllSettlementPayments(result.state.settlementPayments ?? []);
+      setProfileName(updatedParticipant?.name ?? profileName);
+      setProfileEmail(updatedParticipant?.email ?? profileEmail);
+      setProfileAccountNumber(
+        updatedParticipant?.bank.accountNumber ?? profileAccountNumber,
+      );
+      setExpenseFormMessage("Profil peserta berhasil diperbarui.");
+    } catch (error) {
+      setExpenseFormMessage(
+        error instanceof Error ? error.message : "Profil peserta gagal diperbarui.",
+      );
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }
+
   async function handleSaveExpense() {
     if (isSavingExpense) {
       return;
@@ -1038,6 +1090,19 @@ export function BootcampTrackerApp() {
             />
           ) : null}
 
+          {activeView === "profile" ? (
+            <ParticipantProfilePanel
+              accountNumber={profileAccountNumber}
+              email={profileEmail}
+              isSaving={isSavingProfile}
+              name={profileName}
+              onSubmit={handleSaveProfile}
+              setAccountNumber={setProfileAccountNumber}
+              setEmail={setProfileEmail}
+              setName={setProfileName}
+            />
+          ) : null}
+
           {activeView === "transactions" ? (
             <TransactionsPanel
               currentParticipant={currentParticipant}
@@ -1155,7 +1220,7 @@ function DashboardDataShimmer({
           </div>
         </div>
         <div className="mt-4 grid gap-2">
-          {Array.from({ length: 5 }).map((_, index) => (
+          {Array.from({ length: 6 }).map((_, index) => (
             <ShimmerBlock className="h-10 w-full" key={index} />
           ))}
         </div>
@@ -1236,6 +1301,7 @@ function Header({
     members: "Daftar peserta",
     payables: "Tagihan saya",
     receivables: "Piutang saya",
+    profile: "Profil peserta",
   };
 
   return (
@@ -1257,6 +1323,87 @@ function Header({
         <StatusPill label="Akses terbuka" icon={LockKeyhole} tone="neutral" />
       </div>
     </header>
+  );
+}
+
+function ParticipantProfilePanel({
+  accountNumber,
+  email,
+  isSaving,
+  name,
+  onSubmit,
+  setAccountNumber,
+  setEmail,
+  setName,
+}: {
+  accountNumber: string;
+  email: string;
+  isSaving: boolean;
+  name: string;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  setAccountNumber: (value: string) => void;
+  setEmail: (value: string) => void;
+  setName: (value: string) => void;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+      <div>
+        <h2 className="text-xl font-semibold">Edit profil peserta</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Perbarui data kontak dan rekening yang digunakan untuk pembayaran antar peserta.
+        </p>
+      </div>
+
+      <form className="mt-5 grid max-w-2xl gap-4" onSubmit={onSubmit}>
+        <label className="grid gap-2 text-sm font-medium">
+          Nama
+          <input
+            autoComplete="name"
+            className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Nama lengkap"
+            required
+            value={name}
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-medium">
+          Email
+          <input
+            autoComplete="email"
+            className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="nama@email.com"
+            required
+            type="email"
+            value={email}
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-medium">
+          Nomor rekening
+          <input
+            autoComplete="off"
+            className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+            inputMode="numeric"
+            onChange={(event) => setAccountNumber(event.target.value)}
+            placeholder="Nomor rekening"
+            required
+            value={accountNumber}
+          />
+        </label>
+        <button
+          className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70 sm:w-fit"
+          disabled={isSaving}
+          type="submit"
+        >
+          {isSaving ? (
+            <LoaderCircle className="animate-spin" size={17} strokeWidth={1.8} />
+          ) : (
+            <Check size={17} strokeWidth={1.8} />
+          )}
+          {isSaving ? "Menyimpan..." : "Simpan perubahan"}
+        </button>
+      </form>
+    </section>
   );
 }
 

@@ -33,6 +33,7 @@ const {
   recordSettlementPayment,
   reviewBootcampJoinRequest,
   resetAppState,
+  updateParticipantProfile,
   updateExpense,
 } = await import("../src/lib/backend/data-store.js");
 
@@ -375,6 +376,70 @@ describe("backend data store", () => {
        WHERE id = 'admin'`,
       ["admin@bootcamp.test", hashPassword("password")],
     );
+  });
+
+  it("lets a participant update their own profile and bank account number", async () => {
+    await resetAppState();
+
+    const result = await updateParticipantProfile(
+      "bima",
+      {
+        accountNumber: "7000000001",
+        email: "bima.updated@mail.test",
+        name: "Bima Updated",
+      },
+      { participantId: "bima" },
+    );
+    const stored = await adminClient.query(
+      `SELECT u.name AS user_name, u.email AS user_email,
+              p.name AS participant_name, p.email AS participant_email,
+              b.account_number
+       FROM ${testSchema}.users u
+       JOIN ${testSchema}.participants p ON p.user_id = u.id
+       JOIN ${testSchema}.bank_accounts b ON b.participant_id = p.id
+       WHERE p.id = $1`,
+      ["bima"],
+    );
+
+    assert.equal(result.participant.name, "Bima Updated");
+    assert.equal(result.participant.email, "bima.updated@mail.test");
+    assert.equal(result.participant.bank.accountNumber, "7000000001");
+    assert.deepEqual(stored.rows[0], {
+      account_number: "7000000001",
+      participant_email: "bima.updated@mail.test",
+      participant_name: "Bima Updated",
+      user_email: "bima.updated@mail.test",
+      user_name: "Bima Updated",
+    });
+
+    await assert.rejects(
+      () =>
+        updateParticipantProfile(
+          "bima",
+          {
+            accountNumber: "7000000002",
+            email: "nala.kusuma@mail.test",
+            name: "Tidak boleh",
+          },
+          { participantId: "nala" },
+        ),
+      /hanya bisa mengubah profil sendiri/i,
+    );
+    await assert.rejects(
+      () =>
+        updateParticipantProfile(
+          "bima",
+          {
+            accountNumber: "7000000002",
+            email: "nala.kusuma@mail.test",
+            name: "Bima Updated",
+          },
+          { participantId: "bima" },
+        ),
+      /email peserta sudah terdaftar/i,
+    );
+
+    await resetAppState();
   });
 
   it("creates real database-backed session tokens for participants and admins", async () => {

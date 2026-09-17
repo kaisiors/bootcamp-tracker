@@ -369,6 +369,74 @@ export async function deleteParticipant(id) {
   });
 }
 
+export async function updateParticipantProfile(id, payload, options = {}) {
+  return withDatabase(async (client) => {
+    if (options.participantId && options.participantId !== id) {
+      throw createHttpError(403, "Peserta hanya bisa mengubah profil sendiri.");
+    }
+
+    const existingResult = await client.query(
+      `SELECT p.id, p.user_id
+       FROM participants p
+       WHERE p.id = $1
+       LIMIT 1`,
+      [id],
+    );
+    const existing = existingResult.rows[0];
+
+    if (!existing) {
+      throw createHttpError(404, "Peserta tidak ditemukan.");
+    }
+
+    const name = requireString(payload.name, "Nama");
+    const email = requireString(payload.email, "Email").toLowerCase();
+    const accountNumber = requireString(payload.accountNumber, "Nomor rekening");
+    const duplicateEmailResult = await client.query(
+      `SELECT 1
+       FROM users
+       WHERE lower(email) = $1 AND id <> $2
+       LIMIT 1`,
+      [email, existing.user_id],
+    );
+
+    if (duplicateEmailResult.rowCount > 0) {
+      throw createHttpError(409, "Email peserta sudah terdaftar.");
+    }
+
+    await client.query("BEGIN");
+
+    try {
+      await client.query(
+        `UPDATE users
+         SET name = $1, email = $2
+         WHERE id = $3`,
+        [name, email, existing.user_id],
+      );
+      await client.query(
+        `UPDATE participants
+         SET name = $1, email = $2
+         WHERE id = $3`,
+        [name, email, id],
+      );
+      await client.query(
+        `UPDATE bank_accounts
+         SET account_number = $1
+         WHERE participant_id = $2`,
+        [accountNumber, id],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+
+    const state = await readState(client);
+    const participant = state.participants.find((item) => item.id === id);
+
+    return { participant, state };
+  });
+}
+
 export async function reviewBootcampJoinRequest(id, status, reviewerId) {
   return withDatabase(async (client) => {
     if (status !== "approved" && status !== "rejected") {
