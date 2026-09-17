@@ -12,6 +12,7 @@ const testSchema = `bootcamp_tracker_test_${randomBytes(4).toString("hex")}`;
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.BOOTCAMP_TRACKER_PG_SCHEMA = testSchema;
+process.env.BOOTCAMP_TRACKER_NOW = "2026-08-01T00:00:00.000Z";
 
 const adminClient = new Client({ connectionString: databaseUrl });
 
@@ -81,6 +82,51 @@ describe("backend data store", () => {
       ],
     );
     assert.equal(sessionCount.rows[0].total, 1);
+  });
+
+  it("marks active bootcamps completed after their payment deadline", async () => {
+    await resetAppState();
+    await adminClient.query(
+      `UPDATE ${testSchema}.bootcamps
+       SET payment_deadline = $1, status = 'active'
+       WHERE id = $2`,
+      ["2026-08-30T23:59:00+07:00", "bc-ui-09"],
+    );
+    process.env.BOOTCAMP_TRACKER_NOW = "2026-09-01T00:00:00.000Z";
+
+    const state = await getAppState();
+    const bootcamp = state.bootcamps.find((item) => item.id === "bc-ui-09");
+    const persisted = await adminClient.query(
+      `SELECT status
+       FROM ${testSchema}.bootcamps
+       WHERE id = $1`,
+      ["bc-ui-09"],
+    );
+
+    assert.equal(bootcamp.status, "completed");
+    assert.equal(persisted.rows[0].status, "completed");
+
+    process.env.BOOTCAMP_TRACKER_NOW = "2026-08-01T00:00:00.000Z";
+    await resetAppState();
+  });
+
+  it("keeps active bootcamps active before their payment deadline", async () => {
+    await resetAppState();
+    await adminClient.query(
+      `UPDATE ${testSchema}.bootcamps
+       SET payment_deadline = $1, status = 'active'
+       WHERE id = $2`,
+      ["2026-09-30T23:59:00+07:00", "bc-ui-09"],
+    );
+    process.env.BOOTCAMP_TRACKER_NOW = "2026-09-01T00:00:00.000Z";
+
+    const state = await getAppState();
+    const bootcamp = state.bootcamps.find((item) => item.id === "bc-ui-09");
+
+    assert.equal(bootcamp.status, "active");
+
+    process.env.BOOTCAMP_TRACKER_NOW = "2026-08-01T00:00:00.000Z";
+    await resetAppState();
   });
 
   it("validates participant login by email and selected bootcamp", async () => {

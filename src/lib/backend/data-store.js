@@ -735,6 +735,7 @@ async function withDatabase(callback) {
     await prepareSchema(client);
     await migrate(client);
     await seedInitialData(client);
+    await syncExpiredBootcamps(client);
 
     return await callback(client);
   } finally {
@@ -1028,6 +1029,33 @@ async function migrate(client) {
   `);
 }
 
+async function syncExpiredBootcamps(client) {
+  const activeBootcamps = await client.query(
+    `SELECT id, payment_deadline
+     FROM bootcamps
+     WHERE status = 'active'`,
+  );
+  const now = getCurrentTime().getTime();
+  const expiredIds = activeBootcamps.rows
+    .filter((row) => {
+      const deadline = new Date(row.payment_deadline).getTime();
+
+      return Number.isFinite(deadline) && deadline < now;
+    })
+    .map((row) => row.id);
+
+  if (expiredIds.length === 0) {
+    return;
+  }
+
+  await client.query(
+    `UPDATE bootcamps
+     SET status = 'completed'
+     WHERE status = 'active' AND id = ANY($1::text[])`,
+    [expiredIds],
+  );
+}
+
 async function dropTables(client) {
   await client.query(`
     DROP TABLE IF EXISTS sessions CASCADE;
@@ -1171,6 +1199,8 @@ async function seedInitialData(client) {
 }
 
 async function readState(client) {
+  await syncExpiredBootcamps(client);
+
   const bootcampRows = await client.query(
     `SELECT id, name, location, start_date, end_date, payment_deadline, status
      FROM bootcamps
@@ -1386,6 +1416,20 @@ function createHttpError(status, message) {
 
 function hashToken(token) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function getCurrentTime() {
+  const configuredNow = process.env.BOOTCAMP_TRACKER_NOW;
+
+  if (configuredNow) {
+    const parsedNow = new Date(configuredNow);
+
+    if (!Number.isNaN(parsedNow.getTime())) {
+      return parsedNow;
+    }
+  }
+
+  return new Date();
 }
 
 export function hashPassword(password, salt = randomBytes(16).toString("base64url")) {
