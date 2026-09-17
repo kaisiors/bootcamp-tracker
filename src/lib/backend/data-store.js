@@ -390,7 +390,12 @@ export async function updateParticipantProfile(id, payload, options = {}) {
 
     const name = requireString(payload.name, "Nama");
     const email = requireString(payload.email, "Email").toLowerCase();
+    const bankName = requireString(payload.bankName, "Bank");
     const accountNumber = requireString(payload.accountNumber, "Nomor rekening");
+    const accountHolderName = requireString(
+      payload.accountHolderName,
+      "Nama pemilik rekening",
+    );
     const duplicateEmailResult = await client.query(
       `SELECT 1
        FROM users
@@ -420,9 +425,9 @@ export async function updateParticipantProfile(id, payload, options = {}) {
       );
       await client.query(
         `UPDATE bank_accounts
-         SET account_number = $1
-         WHERE participant_id = $2`,
-        [accountNumber, id],
+         SET bank_name = $1, account_number = $2, account_holder_name = $3
+         WHERE participant_id = $4`,
+        [bankName, accountNumber, accountHolderName, id],
       );
       await client.query("COMMIT");
     } catch (error) {

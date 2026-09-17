@@ -378,13 +378,15 @@ describe("backend data store", () => {
     );
   });
 
-  it("lets a participant update their own profile and bank account number", async () => {
+  it("lets a participant update their own profile and bank details", async () => {
     await resetAppState();
 
     const result = await updateParticipantProfile(
       "bima",
       {
+        accountHolderName: "Bima Updated",
         accountNumber: "7000000001",
+        bankName: "Mandiri",
         email: "bima.updated@mail.test",
         name: "Bima Updated",
       },
@@ -393,7 +395,7 @@ describe("backend data store", () => {
     const stored = await adminClient.query(
       `SELECT u.name AS user_name, u.email AS user_email,
               p.name AS participant_name, p.email AS participant_email,
-              b.account_number
+              b.bank_name, b.account_number, b.account_holder_name
        FROM ${testSchema}.users u
        JOIN ${testSchema}.participants p ON p.user_id = u.id
        JOIN ${testSchema}.bank_accounts b ON b.participant_id = p.id
@@ -403,9 +405,13 @@ describe("backend data store", () => {
 
     assert.equal(result.participant.name, "Bima Updated");
     assert.equal(result.participant.email, "bima.updated@mail.test");
+    assert.equal(result.participant.bank.bankName, "Mandiri");
     assert.equal(result.participant.bank.accountNumber, "7000000001");
+    assert.equal(result.participant.bank.accountHolderName, "Bima Updated");
     assert.deepEqual(stored.rows[0], {
+      account_holder_name: "Bima Updated",
       account_number: "7000000001",
+      bank_name: "Mandiri",
       participant_email: "bima.updated@mail.test",
       participant_name: "Bima Updated",
       user_email: "bima.updated@mail.test",
@@ -417,7 +423,9 @@ describe("backend data store", () => {
         updateParticipantProfile(
           "bima",
           {
+            accountHolderName: "Bima Updated",
             accountNumber: "7000000002",
+            bankName: "Mandiri",
             email: "nala.kusuma@mail.test",
             name: "Tidak boleh",
           },
@@ -430,7 +438,9 @@ describe("backend data store", () => {
         updateParticipantProfile(
           "bima",
           {
+            accountHolderName: "Bima Updated",
             accountNumber: "7000000002",
+            bankName: "Mandiri",
             email: "nala.kusuma@mail.test",
             name: "Bima Updated",
           },

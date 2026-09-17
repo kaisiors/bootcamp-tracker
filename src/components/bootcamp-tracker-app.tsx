@@ -228,7 +228,9 @@ export function BootcampTrackerApp() {
   const [isLoadingDashboardData, setIsLoadingDashboardData] = useState(true);
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
+  const [profileBankName, setProfileBankName] = useState("");
   const [profileAccountNumber, setProfileAccountNumber] = useState("");
+  const [profileAccountHolderName, setProfileAccountHolderName] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [expenseEditedShareIds, setExpenseEditedShareIds] = useState<string[]>([]);
@@ -285,7 +287,9 @@ export function BootcampTrackerApp() {
           setSelectedParticipantId(nextParticipant.id);
           setProfileName(nextParticipant.name);
           setProfileEmail(nextParticipant.email);
+          setProfileBankName(nextParticipant.bank.bankName);
           setProfileAccountNumber(nextParticipant.bank.accountNumber);
+          setProfileAccountHolderName(nextParticipant.bank.accountHolderName);
           saveSelectedParticipantId(nextParticipant.id);
         }
 
@@ -885,7 +889,9 @@ export function BootcampTrackerApp() {
 
     try {
       const result = await requestUpdateParticipantProfile(currentParticipant.id, {
+        accountHolderName: profileAccountHolderName,
         accountNumber: profileAccountNumber,
+        bankName: profileBankName,
         email: profileEmail,
         name: profileName,
       });
@@ -899,8 +905,12 @@ export function BootcampTrackerApp() {
       setAllSettlementPayments(result.state.settlementPayments ?? []);
       setProfileName(updatedParticipant?.name ?? profileName);
       setProfileEmail(updatedParticipant?.email ?? profileEmail);
+      setProfileBankName(updatedParticipant?.bank.bankName ?? profileBankName);
       setProfileAccountNumber(
         updatedParticipant?.bank.accountNumber ?? profileAccountNumber,
+      );
+      setProfileAccountHolderName(
+        updatedParticipant?.bank.accountHolderName ?? profileAccountHolderName,
       );
       setExpenseFormMessage("Profil peserta berhasil diperbarui.");
     } catch (error) {
@@ -1092,12 +1102,16 @@ export function BootcampTrackerApp() {
 
           {activeView === "profile" ? (
             <ParticipantProfilePanel
+              accountHolderName={profileAccountHolderName}
               accountNumber={profileAccountNumber}
+              bankName={profileBankName}
               email={profileEmail}
               isSaving={isSavingProfile}
               name={profileName}
               onSubmit={handleSaveProfile}
+              setAccountHolderName={setProfileAccountHolderName}
               setAccountNumber={setProfileAccountNumber}
+              setBankName={setProfileBankName}
               setEmail={setProfileEmail}
               setName={setProfileName}
             />
@@ -1327,21 +1341,29 @@ function Header({
 }
 
 function ParticipantProfilePanel({
+  accountHolderName,
   accountNumber,
+  bankName,
   email,
   isSaving,
   name,
   onSubmit,
+  setAccountHolderName,
   setAccountNumber,
+  setBankName,
   setEmail,
   setName,
 }: {
+  accountHolderName: string;
   accountNumber: string;
+  bankName: string;
   email: string;
   isSaving: boolean;
   name: string;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  setAccountHolderName: (value: string) => void;
   setAccountNumber: (value: string) => void;
+  setBankName: (value: string) => void;
   setEmail: (value: string) => void;
   setName: (value: string) => void;
 }) {
@@ -1379,6 +1401,17 @@ function ParticipantProfilePanel({
           />
         </label>
         <label className="grid gap-2 text-sm font-medium">
+          Bank
+          <input
+            autoComplete="organization"
+            className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+            onChange={(event) => setBankName(event.target.value)}
+            placeholder="Nama bank"
+            required
+            value={bankName}
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-medium">
           Nomor rekening
           <input
             autoComplete="off"
@@ -1388,6 +1421,17 @@ function ParticipantProfilePanel({
             placeholder="Nomor rekening"
             required
             value={accountNumber}
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-medium">
+          Nama pemilik rekening
+          <input
+            autoComplete="name"
+            className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
+            onChange={(event) => setAccountHolderName(event.target.value)}
+            placeholder="Nama pemilik rekening"
+            required
+            value={accountHolderName}
           />
         </label>
         <button

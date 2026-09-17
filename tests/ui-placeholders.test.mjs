@@ -279,7 +279,9 @@ describe("participant profile editing", () => {
       'label: "Profil"',
       "updateParticipantProfile",
       "Menyimpan profil peserta...",
+      "Bank",
       "Nomor rekening",
+      "Nama pemilik rekening",
     ]) {
       assert.equal(
         trackerApp.includes(profileRequirement),
