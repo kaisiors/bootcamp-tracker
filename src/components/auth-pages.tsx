@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BankSelectField } from "./bank-select-field";
 import { FullPageLoadingOverlay } from "./full-page-loading-overlay";
 import {
   createParticipant,
@@ -365,16 +366,7 @@ export function ParticipantRegistrationPage() {
         <section className="rounded-lg border border-border bg-muted p-4">
           <h2 className="text-sm font-semibold">Rekening pembayaran</h2>
           <div className="mt-4 grid gap-4">
-            <label className="grid gap-2 text-sm font-medium">
-              Bank
-              <input
-                className="focus-ring rounded-md border border-input bg-background px-3 py-2.5 text-sm"
-                onChange={(event) => setBankName(event.target.value)}
-                placeholder="BCA"
-                required
-                value={bankName}
-              />
-            </label>
+            <BankSelectField onChange={setBankName} value={bankName} />
             <label className="grid gap-2 text-sm font-medium">
               Nomor rekening
               <input
@@ -414,6 +406,14 @@ export function ParticipantRegistrationPage() {
           <ArrowRight size={17} strokeWidth={1.8} />
         </button>
       </form>
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        <Link
+          className="font-semibold text-accent-foreground underline-offset-4 hover:underline"
+          href="/"
+        >
+          Sudah punya akun? Login peserta
+        </Link>
+      </p>
     </AuthShell>
   );
 }

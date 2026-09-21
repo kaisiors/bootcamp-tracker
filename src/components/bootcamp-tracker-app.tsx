@@ -12,9 +12,7 @@ import {
   CreditCard,
   LayoutDashboard,
   LoaderCircle,
-  LockKeyhole,
   LogOut,
-  Mail,
   Pencil,
   Plus,
   ReceiptText,
@@ -29,6 +27,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { BankSelectField } from "./bank-select-field";
 import { FullPageLoadingOverlay } from "./full-page-loading-overlay";
 import {
   loadSelectedBootcampId,
@@ -1006,19 +1005,35 @@ export function BootcampTrackerApp() {
           payment={paymentTarget}
         />
       ) : null}
-      <div className="mx-auto grid max-w-[1440px] gap-4 lg:grid-cols-[280px_1fr]">
-        <aside className="rounded-lg border border-border bg-card p-3 shadow-[0_20px_70px_rgba(23,32,26,0.08)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)]">
-          <div className="flex items-center gap-3 border-b border-border px-2 pb-4">
+      <div className="mx-auto grid min-w-0 max-w-[1440px] grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-lg border border-border bg-card p-3 shadow-[0_20px_70px_rgba(23,32,26,0.08)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)]">
+          <div className="flex items-center gap-3 border-b border-border px-2 pb-3 lg:pb-4">
             <div className="grid size-10 place-items-center rounded-md bg-primary text-primary-foreground">
               <WalletCards size={21} strokeWidth={1.8} />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">Bootcamp Spending</p>
               <p className="text-xs text-muted-foreground">Batch finance tracker</p>
             </div>
+            <button
+              aria-label="Keluar dari dashboard peserta"
+              className="focus-ring grid size-10 shrink-0 place-items-center rounded-md border border-border text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:text-muted-foreground lg:hidden"
+              disabled={isLoggingOutParticipant}
+              onClick={handleParticipantLogout}
+              type="button"
+            >
+              {isLoggingOutParticipant ? (
+                <LoaderCircle className="animate-spin" size={18} strokeWidth={1.8} />
+              ) : (
+                <LogOut size={18} strokeWidth={1.8} />
+              )}
+            </button>
           </div>
 
-          <nav className="mt-4 grid gap-1">
+          <nav
+            aria-label="Navigasi peserta"
+            className="mt-3 flex gap-1 overflow-x-auto pb-1 lg:mt-4 lg:grid lg:overflow-visible lg:pb-0"
+          >
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeView === item.id;
@@ -1026,12 +1041,13 @@ export function BootcampTrackerApp() {
               return (
                 <button
                   className={[
-                    "focus-ring flex items-center justify-between rounded-md px-3 py-2.5 text-left text-sm transition active:translate-y-px",
+                    "focus-ring flex shrink-0 items-center justify-center rounded-md px-3 py-2.5 text-left text-sm transition active:translate-y-px lg:justify-between",
                     isActive
                       ? "bg-accent font-semibold text-accent-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   ].join(" ")}
                   key={item.id}
+                  aria-current={isActive ? "page" : undefined}
                   onClick={() => setActiveView(item.id)}
                   type="button"
                 >
@@ -1039,13 +1055,15 @@ export function BootcampTrackerApp() {
                     <Icon size={18} strokeWidth={1.8} />
                     {item.label}
                   </span>
-                  {isActive ? <ChevronRight size={16} strokeWidth={1.8} /> : null}
+                  {isActive ? (
+                    <ChevronRight className="hidden lg:block" size={16} strokeWidth={1.8} />
+                  ) : null}
                 </button>
               );
             })}
           </nav>
 
-          <div className="mt-5 rounded-lg bg-muted p-4">
+          <div className="mt-5 hidden rounded-lg bg-muted p-4 lg:block">
             <p className="text-sm font-semibold">{participantBootcamp.name}</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {participantBootcamp.location}, {formatDate(participantBootcamp.startDate)}{" "}
@@ -1064,8 +1082,17 @@ export function BootcampTrackerApp() {
             </div>
           </div>
 
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 lg:hidden">
+            <p className="min-w-0 truncate text-xs font-semibold">
+              {participantBootcamp.name}
+            </p>
+            <p className="shrink-0 text-xs text-muted-foreground">
+              Batas {formatDeadline(participantBootcamp.paymentDeadline)}
+            </p>
+          </div>
+
           <button
-            className="focus-ring mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:active:translate-y-0"
+            className="focus-ring mt-3 hidden w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2.5 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px disabled:cursor-not-allowed disabled:text-muted-foreground disabled:active:translate-y-0 lg:flex"
             disabled={isLoggingOutParticipant}
             onClick={handleParticipantLogout}
             title="Keluar dari dashboard peserta"
@@ -1080,7 +1107,7 @@ export function BootcampTrackerApp() {
           </button>
         </aside>
 
-        <section className="grid gap-4">
+        <section className="grid min-w-0 content-start gap-4 [&>*]:min-w-0">
           <Header
             activeView={activeView}
             bootcampName={participantBootcamp.name}
@@ -1202,7 +1229,10 @@ export function BootcampTrackerApp() {
           ) : null}
 
           {activeView === "members" ? (
-            <MembersPanel participants={bootcampParticipants} />
+            <MembersPanel
+              onManageBankAccount={() => setActiveView("profile")}
+              participants={bootcampParticipants}
+            />
           ) : null}
 
         </section>
@@ -1319,7 +1349,7 @@ function Header({
   };
 
   return (
-    <header className="grid gap-4 rounded-lg border border-border bg-card p-4 shadow-[0_20px_70px_rgba(23,32,26,0.07)] md:grid-cols-[1fr_auto] md:items-center">
+    <header className="px-1 py-2">
       <div>
         <p className="text-sm font-medium text-accent-foreground">
           Halo, {participant.name.split(" ")[0]}
@@ -1330,11 +1360,6 @@ function Header({
         <p className="mt-2 text-sm text-muted-foreground">
           Scope peserta: {bootcampName}
         </p>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <StatusPill label="Peserta aktif" icon={Check} tone="success" />
-        <StatusPill label="Email login" icon={Mail} tone="neutral" />
-        <StatusPill label="Akses terbuka" icon={LockKeyhole} tone="neutral" />
       </div>
     </header>
   );
@@ -1400,17 +1425,11 @@ function ParticipantProfilePanel({
             value={email}
           />
         </label>
-        <label className="grid gap-2 text-sm font-medium">
-          Bank
-          <input
-            autoComplete="organization"
-            className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-            onChange={(event) => setBankName(event.target.value)}
-            placeholder="Nama bank"
-            required
-            value={bankName}
-          />
-        </label>
+        <BankSelectField
+          disabled={isSaving}
+          onChange={setBankName}
+          value={bankName}
+        />
         <label className="grid gap-2 text-sm font-medium">
           Nomor rekening
           <input
@@ -1435,7 +1454,7 @@ function ParticipantProfilePanel({
           />
         </label>
         <button
-          className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70 sm:w-fit"
+          className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 sm:w-fit"
           disabled={isSaving}
           type="submit"
         >
@@ -1512,7 +1531,7 @@ function OverviewPanel({
             </span>
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-lg border border-border">
+          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[680px] border-collapse bg-card text-sm">
               <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                 <tr>
@@ -1682,7 +1701,7 @@ function SettlementGroupCard({
         </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-border">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-border">
         <table className="w-full min-w-[720px] border-collapse bg-card text-sm">
           <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
             <tr>
@@ -1808,7 +1827,7 @@ function PaymentConfirmationDialog({
             Batal
           </button>
           <button
-            className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+            className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:hover:brightness-100 disabled:active:translate-y-0"
             disabled={isSaving}
             onClick={onConfirm}
             type="button"
@@ -1908,6 +1927,7 @@ function TransactionsPanel({
         <label className="focus-within:ring-2 focus-within:ring-ring flex min-w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm md:min-w-[320px]">
           <Search size={17} strokeWidth={1.8} />
           <input
+            aria-label="Cari transaksi"
             className="w-full border-0 bg-transparent outline-none"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Cari transaksi"
@@ -2057,7 +2077,7 @@ function TransactionsPanel({
         </form>
       ) : null}
 
-      <div className="mt-5 overflow-hidden rounded-lg border border-border">
+      <div className="mt-5 overflow-x-auto rounded-lg border border-border">
         <table className="w-full min-w-[840px] border-collapse bg-card text-sm">
           <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
             <tr>
@@ -2367,7 +2387,7 @@ function ExpenseSplitPreviewPanel({
           </button>
         ) : null}
         <button
-          className="focus-ring flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+          className="focus-ring flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:hover:brightness-100 disabled:active:translate-y-0"
           disabled={isSaving || checkedIds.length === 0 || !isSplitTotalValid}
           onClick={onSave}
           type={onSave ? "button" : "submit"}
@@ -2391,9 +2411,15 @@ function ExpenseSplitPreviewPanel({
   );
 }
 
-function MembersPanel({ participants }: { participants: ParticipantRecord[] }) {
+function MembersPanel({
+  onManageBankAccount,
+  participants,
+}: {
+  onManageBankAccount: () => void;
+  participants: ParticipantRecord[];
+}) {
   return (
-    <section className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
+    <section className="py-1">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold">Anggota bootcamp</h2>
@@ -2403,10 +2429,11 @@ function MembersPanel({ participants }: { participants: ParticipantRecord[] }) {
         </div>
         <button
           className="focus-ring flex items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-muted active:translate-y-px"
+          onClick={onManageBankAccount}
           type="button"
         >
           <CreditCard size={17} strokeWidth={1.8} />
-          Tambah rekening
+          Kelola rekening
         </button>
       </div>
 
@@ -3126,12 +3153,12 @@ export function AdminWorkspace() {
   }
 
   return (
-    <section className="grid gap-4">
+    <section className="grid min-w-0 content-start gap-4 [&>*]:min-w-0">
       <FullPageLoadingOverlay
         isVisible={isAdminBlockingProcess}
         message={adminBlockingMessage}
       />
-      <header className="grid gap-4 rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)] xl:grid-cols-[1fr_auto] xl:items-end">
+      <header className="grid gap-4 px-1 py-2 xl:grid-cols-[1fr_auto] xl:items-end">
         <div>
           <p className="text-sm font-medium text-accent-foreground">Admin workspace</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-[0] md:text-4xl">
@@ -3142,7 +3169,10 @@ export function AdminWorkspace() {
           </p>
         </div>
         <div className="grid gap-3">
-          <nav className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-7">
+          <nav
+            aria-label="Navigasi admin"
+            className="flex max-w-[calc(100vw-2rem)] gap-2 overflow-x-auto pb-1 xl:grid xl:max-w-none xl:grid-cols-7 xl:overflow-visible xl:pb-0"
+          >
             {adminNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeAdminView === item.id;
@@ -3150,7 +3180,7 @@ export function AdminWorkspace() {
               return (
                 <button
                   className={[
-                    "focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold transition active:translate-y-px",
+                    "focus-ring inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold transition active:translate-y-px",
                     isActive
                       ? "bg-accent text-accent-foreground"
                       : "bg-muted text-muted-foreground hover:text-foreground",
@@ -3246,7 +3276,7 @@ export function AdminWorkspace() {
               Belum ada pengajuan bergabung.
             </div>
           ) : (
-            <div className="mt-5 overflow-hidden rounded-lg border border-border">
+            <div className="mt-5 overflow-x-auto rounded-lg border border-border">
               <table className="w-full min-w-[1040px] border-collapse bg-card text-sm">
                 <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                   <tr>
@@ -3381,7 +3411,7 @@ export function AdminWorkspace() {
                   Belum ada detail kewajiban untuk bootcamp ini.
                 </div>
               ) : (
-                <div className="mt-5 overflow-hidden rounded-lg border border-border">
+                <div className="mt-5 overflow-x-auto rounded-lg border border-border">
                   <table className="w-full min-w-[900px] border-collapse bg-card text-sm">
                     <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                       <tr>
@@ -3437,7 +3467,7 @@ export function AdminWorkspace() {
                   Belum ada bootcamp untuk dimonitor.
                 </div>
               ) : (
-                <div className="mt-5 overflow-hidden rounded-lg border border-border">
+                <div className="mt-5 overflow-x-auto rounded-lg border border-border">
                   <table className="w-full min-w-[980px] border-collapse bg-card text-sm">
                     <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                       <tr>
@@ -3625,7 +3655,7 @@ export function AdminWorkspace() {
             </select>
           </label>
           <button
-            className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+            className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:hover:brightness-100 disabled:active:translate-y-0"
             disabled={isSavingBootcamp}
             type="submit"
           >
@@ -3664,7 +3694,7 @@ export function AdminWorkspace() {
               Admin melihat batch aktif, selesai, dan batch terjadwal.
             </p>
           </div>
-          <div className="mt-5 overflow-hidden rounded-lg border border-border">
+          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[900px] border-collapse bg-card text-sm">
               <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                 <tr>
@@ -3813,16 +3843,11 @@ export function AdminWorkspace() {
                 ))}
               </select>
             </label>
-            <label className="grid gap-2 text-sm font-medium">
-              Bank
-              <input
-                className="focus-ring rounded-md border border-border bg-card px-3 py-2.5 text-sm"
-                onChange={(event) => setNewParticipantBankName(event.target.value)}
-                placeholder="BCA"
-                required
-                value={newParticipantBankName}
-              />
-            </label>
+            <BankSelectField
+              disabled={isCreatingParticipant}
+              onChange={setNewParticipantBankName}
+              value={newParticipantBankName}
+            />
             <label className="grid gap-2 text-sm font-medium">
               No. rekening
               <input
@@ -3849,7 +3874,7 @@ export function AdminWorkspace() {
               />
             </label>
             <button
-              className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:brightness-100 disabled:active:translate-y-0"
+              className="focus-ring flex h-[42px] items-center justify-center gap-2 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:hover:brightness-100 disabled:active:translate-y-0"
               disabled={isCreatingParticipant}
               type="submit"
             >
@@ -3950,7 +3975,7 @@ export function AdminWorkspace() {
               Daftar rekening peserta untuk kebutuhan pembayaran antar peserta.
             </p>
           </div>
-          <div className="mt-5 overflow-hidden rounded-lg border border-border">
+          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[760px] border-collapse bg-card text-sm">
               <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                 <tr>
@@ -4169,7 +4194,7 @@ export function AdminWorkspace() {
               />
             </form>
           ) : null}
-          <div className="mt-5 overflow-hidden rounded-lg border border-border">
+          <div className="mt-5 overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[920px] border-collapse bg-card text-sm">
               <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                 <tr>
@@ -4379,30 +4404,6 @@ function MetricCard({
     <article className="rounded-lg border border-border bg-card p-5 shadow-[0_20px_70px_rgba(23,32,26,0.07)]">
       {content}
     </article>
-  );
-}
-
-function StatusPill({
-  icon: Icon,
-  label,
-  tone,
-}: {
-  icon: typeof Check;
-  label: string;
-  tone: "neutral" | "success";
-}) {
-  return (
-    <span
-      className={[
-        "inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold",
-        tone === "success"
-          ? "bg-accent text-accent-foreground"
-          : "bg-muted text-muted-foreground",
-      ].join(" ")}
-    >
-      <Icon size={15} strokeWidth={1.8} />
-      {label}
-    </span>
   );
 }
 

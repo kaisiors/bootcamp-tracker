@@ -13,7 +13,7 @@ export default async function AdminDashboardPage() {
 
   return (
     <main className="min-h-[100dvh] px-4 py-4 text-foreground sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-[1440px] gap-4">
+      <div className="mx-auto grid min-w-0 max-w-[1440px] gap-4">
         <AdminWorkspace />
       </div>
     </main>
